@@ -6,7 +6,7 @@ Introduction
 ------------
 
 This tool takes a sequence of points for multiple electronic states with energies and properties and reorders them such
-that the energies and properties are continuous for each state. This is done by defining finite differences along a
+that the energies and properties are continuous for each state. This is done by defining n-point finite differences along a
 sliding window centered at each point. The point is swapped with all states, and the state that is most continuous at
 that point is kept.
 

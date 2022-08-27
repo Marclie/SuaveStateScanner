@@ -41,13 +41,12 @@ Arguments
   to enforce continuity of states. If not specified, default values will be set (default: None)
 
 * `bounds` (optional) - The bounds of the points in the input file (default: None). If provided, this should be a list
-  of tuples in the form [(xmin, xmax), (ymin, ymax), ...] where xmin/xmax are the minimum/maximum values for the first
-  coordinate, ymin/ymax are the minimum/maximum values for the second coordinate, etc. (default: None)
+  in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
 
 * `stateBounds` (optional) - The bounds of the states in the input file (default: None). If provided, this should be a
-  list of tuples in which each tuple is itself a tuple in the form (statemin, statemax) specifying inclusive lower and
+  list in the form [statemin, statemax] specifying inclusive lower and
   upper bounds on indices identifying individual electronic states within an ensemble (e.g., if numStates=3 then
-  stateBounds=[(0,1),(2)] would select only two out three available electronic states). By default all available
+  stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
   electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
 
 * `nthreads` (optional) - The number of threads to use (default: 1)

@@ -33,7 +33,7 @@ Arguments
   and properties.
 
 * `outfile` - The name of the output file. This file will be filled with rows corresponding to the reaction coordinate
-  and then by state, with the energy and features of each state printed along the columns.
+  and then by state, with the energy of each state printed along the columns.
 
 * `numStates` - The number of states in the input file.
 

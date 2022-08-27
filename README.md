@@ -43,7 +43,7 @@ Arguments
 * `bounds` (optional) - The bounds of the points in the input file. If provided, this should be a list
   in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
 
-* `stateBounds` (optional) - The bounds of the states in the input file (default: None). If provided, this should be a
+* `stateBounds` (optional) - The bounds of the states in the input file. If provided, this should be a
   list in the form [statemin, statemax] specifying inclusive lower and
   upper bounds on indices identifying individual electronic states within an ensemble (e.g., if numStates=3 then
   stateBounds=[0, 1] would select only two out of three available electronic states). By default all available

@@ -96,9 +96,9 @@ When using SuaveStateScanner for research projects, please cite:
 ```
 @misc{SuaveStateScanner,
     author       = {Marcus D. Liebenthal},
-    title        = {{SuaveStateScanner}: https://github.com/Marclie/suavestatescanner},
+    title        = {{SuaveStateScanner}: https://github.com/Marclie/SuaveStateScanner},
     month        = {August},
     year         = {2022},
-    url          = {https://github.com/Marclie/suavestatescanner} 
+    url          = {https://github.com/Marclie/SuaveStateScanner} 
 }
 ```

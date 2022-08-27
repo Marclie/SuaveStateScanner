@@ -67,7 +67,7 @@ Input File Format
 
 The file is assumed to contain a sequence of points for multiple states with energies and properties. The file will be
 filled with rows corresponding to the reaction coordinate and then by state, with the energy and features of each state
-printed along the columns. The first column must be the energy of the state, or some other target variable.
+printed along the columns. The first column must be the reaction coordinate. The second column must be the energy of the state, or some other target variable.
 
     rc1 energy1 feature1.1 feature1.2 --->
     rc1 energy2 feature2.1 feature2.2 --->

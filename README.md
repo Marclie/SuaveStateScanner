@@ -1,6 +1,8 @@
+
+![Alt text](suave.svg)
+
 [SuaveStateScanner] - A tool for excited electronic state reordering
 =======================================================================
-
 
 Introduction
 ------------

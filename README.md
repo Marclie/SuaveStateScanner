@@ -82,8 +82,8 @@ The configuration file is a text file with the following format:
 ```
 # This is a comment line. All lines starting with '#' will be ignored.
 order = [1]  # The order of derivatives desired for computation. Can be a list of integers. Default is [1].
-width = 2  # The width of the stencil used to compute the derivatives. Note that you need n+1 points to compute an nth derivative. Default is 2.
-cutoff = None  # The cutoff sets how many points to consider from the right of the center. Default is None, which means all points will be considered.
+width = 8  # The width of the stencil used to compute the derivatives. Note that you need n+1 points to compute an nth derivative. Default is 2.
+cutoff = 1  # The cutoff sets how many points to consider from the right of the center. Default is 1, which means only a single point to the right of the current is used for stencil.
 maxPan = None  # The maxPan sets how far the window of size width can shift from the center point. Default is None, which means there is no limit on how far it can shift.
 ```
 

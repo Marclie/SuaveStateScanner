@@ -19,7 +19,7 @@ import sys
 
 import numba
 import numpy as np
-from numba import njit, prange
+from numba import njit, prange, set_num_threads
 from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
 
 from nstencil import makeStencil
@@ -145,8 +145,8 @@ def stringToList(string):
 
 def applyConfig(configPath=None):
     orders = [1]
-    width = 2
-    cutoff = None
+    width = 8
+    cutoff = 1
     maxPan = None
     if configPath is None:
         return orders, width, cutoff, maxPan
@@ -498,9 +498,9 @@ if __name__ == "__main__":
         raise ValueError("Third argument must specify the number of states in the input data")
 
     if len(sys.argv) > 4:
-        configPath = sys.argv[4]
+         configPath = sys.argv[4]
     else:
-        configPath = None
+         configPath = None
     if len(sys.argv) > 5:
         stateBounds = stringToList(sys.argv[5])
     else:

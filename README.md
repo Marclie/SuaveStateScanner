@@ -40,7 +40,7 @@ Arguments
 * `configPath` (optional) - This is the path to a configuration file that will set up parameters for the stencils used
   to enforce continuity of states. If not specified, default values will be set (default: None)
 
-* `bounds` (optional) - The bounds of the points in the input file (default: None). If provided, this should be a list
+* `bounds` (optional) - The bounds of the points in the input file. If provided, this should be a list
   in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
 
 * `stateBounds` (optional) - The bounds of the states in the input file (default: None). If provided, this should be a

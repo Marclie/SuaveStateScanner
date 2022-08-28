@@ -28,6 +28,8 @@ To use this tool, simply run:
 
     python suave_state_scanner.py <infile> <outfile> <numStates> [<configFile>] [<bounds>] [<stateBounds>] [<nthreads>] [<makePos>] [<doShuffle>]
 
+This will output the new energy ordering from <infile> to <outfile>, with the reaction coordinate as the first row. During the reordering procedure, the files "tempInput.csv" and "tempOutput.csv". "tempOutput.csv" stores the output at any given iteration for the states, which is used to track the progress of the reordering. "tempInput.csv" stores all the state information for each point in a file that can be used to restart this script.
+
 Arguments
 ---------
 
@@ -84,7 +86,7 @@ The configuration file is a text file with the following format:
 ```
 # This is a comment line. All lines starting with '#' will be ignored.
 order = [1]  # The order of derivatives desired for computation. Can be a list of integers. Default is [1].
-width = 8  # The width of the stencil used to compute the derivatives. Note that you need n+1 points to compute an nth derivative. Default is 2.
+width = 8  # The width of the stencil used to compute the derivatives. Note that you need n+1 points to compute an nth derivative. Default is 8.
 cutoff = 1  # The cutoff sets how many points to consider from the right of the center. Default is 1, which means only a single point to the right of the current is used for stencil.
 maxPan = None  # The maxPan sets how far the window of size width can shift from the center point. Default is None, which means there is no limit on how far it can shift.
 ```

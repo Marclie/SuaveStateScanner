@@ -26,7 +26,7 @@ Usage
 
 To use this tool, simply run:
 
-    python suave_state_scanner.py <infile> <outfile> <numStates> [<configFile>] [<bounds>] [<stateBounds>] [<nthreads>] [<makePos>] [<doShuffle>]
+    python suave_state_scanner.py <infile> <outfile> <numStates> [<configFile>]
 
 This will output the new energy ordering from \<infile\> to \<outfile\>, with the reaction coordinate as the first row. During the reordering procedure, the files "tempInput.csv" and "tempOutput.csv" are generated. "tempOutput.csv" stores the output at any given iteration for the states, which is used to track the progress of the reordering. "tempInput.csv" stores all the state information for each point in a file that can be used to restart this script.
 
@@ -58,8 +58,8 @@ printed along the columns. The first column must be the reaction coordinate. The
     rc2 energy1 feature1.1 feature1.2 --->
     rc2 energy2 feature2.1 feature2.2 --->
 
-Configuration File
-------------------
+Configuration File Format
+-------------------------
 The configuration file is a text file with the following format:
 
 ```
@@ -103,7 +103,7 @@ All configurations in the configuration file are optional and are defined as fol
   stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
   electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
 
-* `nthreads` - The number of threads to use (default: 1)
+* `nthreads` - The number of numba threads to use (default: 1)
 
 * `makePos` - Whether to make all extracted features positive before sorting according to increasing energy
   eigenvalue along each curve/trajectory/reaction path segment sampled during electronic structure calculations or other

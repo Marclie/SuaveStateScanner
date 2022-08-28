@@ -148,52 +148,99 @@ def applyConfig(configPath=None):
     width = 8
     cutoff = 1
     maxPan = None
+    stateBounds = None
+    pntBounds = None
+    nthreads = 1
+    makePos = False
+    doShuffle = False
     if configPath is None:
-        return orders, width, cutoff, maxPan
+        return orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
 
     configer = open(configPath, 'r')
-
     for line in configer.readlines():
+        line = line.replace("\n", "").replace(" ", "").strip()
         if line[0] == "#":
             continue
-        formattedLine = line.replace("\n", "").strip()
+        splitLine = line.split("=")
         if "order" in line:
-            splitLine = line.split("=")
-            orders = stringToList(splitLine[1])
-            orders = [int(order) for order in orders]
-            if len(orders) == 0:
-                raise "The orders of the derivatives desired for computation are required"
+            try:
+                orders = stringToList(splitLine[1])
+                orders = [int(order) for order in orders]
+                if len(orders) == 0:
+                    print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'")
+                    orders = [1]
+            except ValueError:
+                print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'")
+                orders = [1]
         if "width" in line:
-            splitLine = line.split("=")
-            width = int(splitLine[1])
-            if width <= 0:
-                raise "invalid size for width of stencil"
-
+            try:
+                width = int(splitLine[1])
+            except ValueError:
+                print("invalid type for width. Defaulting to '8'")
+                width = 8
         if "cutoff" in line:
-            splitLine = line.split("=")
             try:
                 cutoff = int(splitLine[1])
             except ValueError:
-                if "None" in splitLine[1]:
-                    cutoff = None
-                    continue
-                else:
-                    raise "invalid type for cutoff. Must be an integer"
+                if "None" not in splitLine[1]:
+                    print("invalid type for cutoff. Defaulting to '1'")
+                cutoff = 1
         if "maxPan" in line:
-            splitLine = line.split("=")
             try:
                 maxPan = int(splitLine[1])
             except ValueError:
-                if "None" in splitLine[1]:
-                    maxPan = None
-                    continue
-                else:
-                    raise "invalid type for maxPan"
+                if "None" not in splitLine[1]:
+                    print("invalid type for maxPan. Defaulting to 'None'")
+                maxPan = None
+        if "pntBounds" in line:
+            try:
+                pntBounds = stringToList(splitLine[1])
+                pntBounds = [int(pntBound) for pntBound in pntBounds]
+                if len(pntBounds) == 0:
+                    print("The pntBounds provided is invalid. Defaulting to 'None'")
+                    pntBounds = None
+            except ValueError:
+                if "None" not in splitLine[1]:
+                    print("The pntBounds provided is invalid. Defaulting to 'None'")
+                pntBounds = None
+        if "stateBounds" in line:
+            try:
+                stateBounds = stringToList(splitLine[1])
+                stateBounds = [int(stateBound) for stateBound in stateBounds]
+                if len(stateBounds) == 0:
+                    print("The stateBounds provided is invalid. Defaulting to 'None'")
+                    stateBounds = None
+            except ValueError:
+                if "None" not in splitLine[1]:
+                    print("The stateBounds provided is invalid. Defaulting to 'None'")
+                stateBounds = None
+        if "nthreads" in line:
+            try:
+                nthreads = int(splitLine[1])
+            except ValueError:
+                print("Invalid nthread size. Defaulting to 1.")
+                nthreads = 1
+        if "makePos" in line:
+            try:
+                makePos = bool(splitLine[1])
+            except ValueError:
+                print("Invalid makePos. Defaulting to False.")
+                makePos = False
+        if "doShuffle" in line:
+            try:
+                doShuffle = bool(splitLine[1])
+            except ValueError:
+                print("Invalid doShuffle. Defaulting to False.")
+                doShuffle = False
+    if width <= 0 or width <= max(orders):
+        print(
+            "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
+        width = max(orders) + 3
     configer.close()
-    return orders, width, cutoff, maxPan
+    return orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
 
 
-def arrangeStates(Evals, Nvals, allPnts, configPath=None, bounds=None, maxiter=-1, repeatMax=2, numStateRepeat=10):
+def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=2, numStateRepeat=10):
     # This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
     #
     # Inputs:
@@ -211,8 +258,6 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, bounds=None, maxiter=-
 
     numStates = Evals.shape[0]
     numPoints = Evals.shape[1]
-    if bounds is None:
-        bounds = [0, numPoints]
     if maxiter is None:
         maxiter = numStates + 1
 
@@ -231,7 +276,10 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, bounds=None, maxiter=-
     stateRepeatList = np.zeros(numStates)
 
     # set parameters from configuration file
-    orders, width, cutoff, maxPan = applyConfig(configPath)
+    orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
+
+    if pntBounds is None:
+        pntBounds = [0, numPoints]
 
     # arrange states such that energy and amplitude norms are continuous
     numSweeps = numPoints ** 2
@@ -240,7 +288,7 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, bounds=None, maxiter=-
             stateEvals = cp.deepcopy(Evals)
             stateNvals = cp.deepcopy(Nvals)
             saveOrder(Evals, Nvals, allPnts)
-            for pnt in range(bounds[0], bounds[1]):
+            for pnt in range(pntBounds[0], pntBounds[1]):
                 if stateRepeatList[state] >= numStateRepeat:  # Modify
                     print("\n%%%%%%%%%%", "SWEEP ", sweep, "%%%%%%%%%%")
                     print("@@@@@@@", "STATE", state, "@@@@@@@@@")
@@ -443,9 +491,7 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle):
     return Evals, Nvals, allPnts
 
 
-def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None, bounds=None,
-         stateBounds=None, nthreads=None, makePos=False,
-         doShuffle=False):
+def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None):
     """
     This function takes a sequence of points for multiple states with energies and properties
     and reorders them such that the energies and properties are continuous
@@ -472,11 +518,12 @@ def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None
 
     Returns None
     """
-    numba.set_num_threads(1 if nthreads is None else nthreads)
 
+    orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
+    numba.set_num_threads(1 if nthreads is None else nthreads)
     Evals, Nvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle)
     sortEnergies(Evals, Nvals)
-    arrangeStates(Evals, Nvals, allPnts, configPath, bounds, maxiter=200, repeatMax=2, numStateRepeat=50)
+    arrangeStates(Evals, Nvals, allPnts, configPath, maxiter=200, repeatMax=2, numStateRepeat=50)
     newCurvesList = []
     for pnt in range(Evals.shape[1]):
         newCurvesList.append(Evals[:, pnt])
@@ -498,28 +545,8 @@ if __name__ == "__main__":
         raise ValueError("Third argument must specify the number of states in the input data")
 
     if len(sys.argv) > 4:
-         configPath = sys.argv[4]
+        configPath = sys.argv[4]
     else:
-         configPath = None
-    if len(sys.argv) > 5:
-        stateBounds = stringToList(sys.argv[5])
-    else:
-        stateBounds = None
-    if len(sys.argv) > 6:
-        bounds = stringToList(sys.argv[6])
-    else:
-        bounds = None
-    if len(sys.argv) > 7:
-        nthreads = int(sys.argv[7])
-    else:
-        nthreads = 1
-    if len(sys.argv) > 8:
-        makePos = bool(sys.argv[8])
-    else:
-        makePos = False
-    if len(sys.argv) > 9:
-        doShuffle = bool(sys.argv[9])
-    else:
-        doShuffle = False
+        configPath = None
 
-    main(infile, outfile, numStates, configPath, stateBounds, bounds, nthreads, makePos, doShuffle)
+    main(infile, outfile, numStates, configPath)

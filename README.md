@@ -26,7 +26,7 @@ Usage
 
 To use this tool, simply run:
 
-    python suave_state_scanner.py <infile> <outfile> <numStates> [<configFile>] [<bounds>] [<stateBounds>] [<nthreads>] [<makePos>] [<doShuffle>]
+    python suave_state_scanner.py <infile> <outfile> <numStates> [<configFile>]
 
 Arguments
 ---------
@@ -41,27 +41,6 @@ Arguments
 
 * `configPath` (optional) - This is the path to a configuration file that will set up parameters for the stencils used
   to enforce continuity of states. If not specified, default values will be set (default: None)
-
-* `bounds` (optional) - The bounds of the points in the input file. If provided, this should be a list
-  in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
-
-* `stateBounds` (optional) - The bounds of the states in the input file. If provided, this should be a
-  list in the form [statemin, statemax] specifying inclusive lower and
-  upper bounds on indices identifying individual electronic states within an ensemble (e.g., if numStates=3 then
-  stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
-  electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
-
-* `nthreads` (optional) - The number of threads to use (default: 1)
-
-* `makePos` (optional) - Whether to make all extracted features positive before sorting according to increasing energy
-  eigenvalue along each curve/trajectory/reaction path segment sampled during electronic structure calculations or other
-  types of calculations from which data was obtained as input to the SuaveStateScanner program. Making features positive
-  can sometimes improve performance on data processed by SuaveStateScanner as input but isn't strictly necessary so
-  default value is False. (default: False)
-
-* `doShuffle` (optional) - Whether to shuffle order or energy eigenvalues along each curve sampled from electronic
-  structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed
-  by SuaveStateScanner as input but isn't strictly necessary so default value is False. (default: False)
 
 Input File Format
 -----------------
@@ -83,11 +62,57 @@ The configuration file is a text file with the following format:
 
 ```
 # This is a comment line. All lines starting with '#' will be ignored.
-order = [1]  # The order of derivatives desired for computation. Can be a list of integers. Default is [1].
-width = 8  # The width of the stencil used to compute the derivatives. Note that you need n+1 points to compute an nth derivative. Default is 2.
-cutoff = 1  # The cutoff sets how many points to consider from the right of the center. Default is 1, which means only a single point to the right of the current is used for stencil.
-maxPan = None  # The maxPan sets how far the window of size width can shift from the center point. Default is None, which means there is no limit on how far it can shift.
+orders = [1]
+width = 8
+cutoff = 1
+maxPan = None
+stateBounds = None
+pntBounds = None
+nthreads = 1
+makePos = False
+doShuffle = False
 ```
+
+All configurations in the configuration file are optional and are defined as follows:
+
+* `orders` - The 'orders' parameter defines the orders of derivatives desired for computation.
+   This parameter is required and must be a list of integers.
+   If this parameter is not provided, the default value '[1]' will be used. (default: [1])
+
+* `width` - The 'width' parameter defines the width of the stencil used for finite differences.
+   This parameter is optional and must be a positive integer greater than max order.
+   If this parameter is not provided, the default value '8' or 'max(orders)+3' will be used. (default: 8)
+
+* `cutoff` - The 'cutoff' parameter defines the number of points from the right of the center that is included in the stencils.
+   This parameter is optional and must be a positive integer. If this parameter is not provided, 
+   the default value '1' will be used. A small value is ideal since the script reorders points from left to right; 
+   points on the right will be unsorted making their derivatives mostly invalid (default: 1)
+
+* `maxPan` - The 'maxPan' parameter defines the maximum number of times the stencil of size width can pivot 
+   around the center point. This parameter is optional and must be a positive integer. If this parameter is not provided, 
+   the default value 'None' will be used, meaning there is no limit to the pivoting of the stencil.  (default: False)
+
+* `pntBounds` - The bounds of the points in the input file. If provided, this should be a list
+  in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
+
+* `stateBounds` - The bounds of the states in the input file. If provided, this should be a
+  list in the form [statemin, statemax] specifying inclusive lower and
+  upper bounds on indices identifying individual electronic states within an ensemble (e.g., if numStates=3 then
+  stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
+  electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
+
+* `nthreads` - The number of threads to use (default: 1)
+
+* `makePos` - Whether to make all extracted features positive before sorting according to increasing energy
+  eigenvalue along each curve/trajectory/reaction path segment sampled during electronic structure calculations or other
+  types of calculations from which data was obtained as input to the SuaveStateScanner program. Making features positive
+  can sometimes improve performance on data processed by SuaveStateScanner as input but isn't strictly necessary so
+  default value is False. (default: False)
+
+* `doShuffle` - Whether to shuffle order or energy eigenvalues along each curve sampled from electronic
+  structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed
+  by SuaveStateScanner as input but isn't strictly necessary so default value is False. (default: False)
+
 
 How to cite
 ------------------

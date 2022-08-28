@@ -17,7 +17,7 @@ w.r.t their properties. This can help identify the symmetry of electronic states
 calculation.
 
 This is a general mathematical tool to enforce continuity of any set of states along a set of points with quantities
-that needs the states to be continuous along their points. This will only work well for data that is inherently
+that need the states to be continuous along their points. This will only work well for data that is inherently
 continuous with closely spaced points.
 
 

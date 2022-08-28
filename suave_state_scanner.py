@@ -25,7 +25,7 @@ from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
 from nstencil import makeStencil
 
 
-def generateDerivatives(N, center, F, allPnts, minh, orders, width, cutoff, maxPan):  # Modify
+def generateDerivatives(N, center, F, allPnts, minh, orders, width, cutoff, maxPan):
     """
     This function approximates the n-th order derivatives of a function, F, at a point, center.
     The derivatives are computed using a stencil of width, width.

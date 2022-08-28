@@ -28,7 +28,7 @@ To use this tool, simply run:
 
     python suave_state_scanner.py <infile> <outfile> <numStates> [<configFile>] [<bounds>] [<stateBounds>] [<nthreads>] [<makePos>] [<doShuffle>]
 
-This will output the new energy ordering from \<infile\> to \<outfile\>, with the reaction coordinate as the first row. During the reordering procedure, the files "tempInput.csv" and "tempOutput.csv". "tempOutput.csv" stores the output at any given iteration for the states, which is used to track the progress of the reordering. "tempInput.csv" stores all the state information for each point in a file that can be used to restart this script.
+This will output the new energy ordering from \<infile\> to \<outfile\>, with the reaction coordinate as the first row. During the reordering procedure, the files "tempInput.csv" and "tempOutput.csv" are generated. "tempOutput.csv" stores the output at any given iteration for the states, which is used to track the progress of the reordering. "tempInput.csv" stores all the state information for each point in a file that can be used to restart this script.
 
 Arguments
 ---------

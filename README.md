@@ -44,27 +44,6 @@ Arguments
 * `configPath` (optional) - This is the path to a configuration file that will set up parameters for the stencils used
   to enforce continuity of states. If not specified, default values will be set (default: None)
 
-* `bounds` (optional) - The bounds of the points in the input file. If provided, this should be a list
-  in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
-
-* `stateBounds` (optional) - The bounds of the states in the input file. If provided, this should be a
-  list in the form [statemin, statemax] specifying inclusive lower and
-  upper bounds on indices identifying individual electronic states within an ensemble (e.g., if numStates=3 then
-  stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
-  electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
-
-* `nthreads` (optional) - The number of threads to use (default: 1)
-
-* `makePos` (optional) - Whether to make all extracted features positive before sorting according to increasing energy
-  eigenvalue along each curve/trajectory/reaction path segment sampled during electronic structure calculations or other
-  types of calculations from which data was obtained as input to the SuaveStateScanner program. Making features positive
-  can sometimes improve performance on data processed by SuaveStateScanner as input but isn't strictly necessary so
-  default value is False. (default: False)
-
-* `doShuffle` (optional) - Whether to shuffle order or energy eigenvalues along each curve sampled from electronic
-  structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed
-  by SuaveStateScanner as input but isn't strictly necessary so default value is False. (default: False)
-
 Input File Format
 -----------------
 

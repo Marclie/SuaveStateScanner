@@ -128,7 +128,7 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
 def getMetric(diffE, diffN):
     # mean approximate differences summed for each state
     Esum = diffE.sum()
-    Nsum = diffN.sum()
+    Nsum = diffN.mean()
     return abs(Nsum * Esum)
 
 
@@ -137,107 +137,6 @@ def sortEnergies(Evals, Nvals):
     idx = Evals[:, 0].argsort()
     Evals[:] = Evals[idx]
     Nvals[:] = Nvals[idx]
-
-
-def stringToList(string):
-    return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
-
-
-def applyConfig(configPath=None):
-    orders = [1]
-    width = 8
-    cutoff = 1
-    maxPan = None
-    stateBounds = None
-    pntBounds = None
-    nthreads = 1
-    makePos = False
-    doShuffle = False
-    if configPath is None:
-        return orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
-
-    configer = open(configPath, 'r')
-    for line in configer.readlines():
-        line = line.replace("\n", "").replace(" ", "").strip()
-        if line[0] == "#":
-            continue
-        splitLine = line.split("=")
-        if "order" in line:
-            try:
-                orders = stringToList(splitLine[1])
-                orders = [int(order) for order in orders]
-                if len(orders) == 0:
-                    print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'")
-                    orders = [1]
-            except ValueError:
-                print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'")
-                orders = [1]
-        if "width" in line:
-            try:
-                width = int(splitLine[1])
-            except ValueError:
-                print("invalid type for width. Defaulting to '8'")
-                width = 8
-        if "cutoff" in line:
-            try:
-                cutoff = int(splitLine[1])
-            except ValueError:
-                if "None" not in splitLine[1]:
-                    print("invalid type for cutoff. Defaulting to '1'")
-                cutoff = 1
-        if "maxPan" in line:
-            try:
-                maxPan = int(splitLine[1])
-            except ValueError:
-                if "None" not in splitLine[1]:
-                    print("invalid type for maxPan. Defaulting to 'None'")
-                maxPan = None
-        if "pntBounds" in line:
-            try:
-                pntBounds = stringToList(splitLine[1])
-                pntBounds = [int(pntBound) for pntBound in pntBounds]
-                if len(pntBounds) == 0:
-                    print("The pntBounds provided is invalid. Defaulting to 'None'")
-                    pntBounds = None
-            except ValueError:
-                if "None" not in splitLine[1]:
-                    print("The pntBounds provided is invalid. Defaulting to 'None'")
-                pntBounds = None
-        if "stateBounds" in line:
-            try:
-                stateBounds = stringToList(splitLine[1])
-                stateBounds = [int(stateBound) for stateBound in stateBounds]
-                if len(stateBounds) == 0:
-                    print("The stateBounds provided is invalid. Defaulting to 'None'")
-                    stateBounds = None
-            except ValueError:
-                if "None" not in splitLine[1]:
-                    print("The stateBounds provided is invalid. Defaulting to 'None'")
-                stateBounds = None
-        if "nthreads" in line:
-            try:
-                nthreads = int(splitLine[1])
-            except ValueError:
-                print("Invalid nthread size. Defaulting to 1.")
-                nthreads = 1
-        if "makePos" in line:
-            try:
-                makePos = bool(splitLine[1])
-            except ValueError:
-                print("Invalid makePos. Defaulting to False.")
-                makePos = False
-        if "doShuffle" in line:
-            try:
-                doShuffle = bool(splitLine[1])
-            except ValueError:
-                print("Invalid doShuffle. Defaulting to False.")
-                doShuffle = False
-    if width <= 0 or width <= max(orders):
-        print(
-            "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
-        width = max(orders) + 3
-    configer.close()
-    return orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
 
 
 def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=2, numStateRepeat=10):
@@ -441,6 +340,107 @@ def saveOrder(Evals, Nvals, allPnts):
     newCurves = stack(newCurvesList, axis=1)
     newCurves = insert(newCurves, 0, allPnts, axis=0)
     savetxt('tempOutput.csv', newCurves, fmt='%20.12f')
+
+
+def stringToList(string):
+    return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
+
+
+def applyConfig(configPath=None):
+    orders = [1]
+    width = 8
+    cutoff = 1
+    maxPan = None
+    stateBounds = None
+    pntBounds = None
+    nthreads = 1
+    makePos = False
+    doShuffle = False
+    if configPath is None:
+        return orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
+
+    configer = open(configPath, 'r')
+    for line in configer.readlines():
+        line = line.replace("\n", "").replace(" ", "").strip()
+        if line[0] == "#":
+            continue
+        splitLine = line.split("=")
+        if "order" in line:
+            try:
+                orders = stringToList(splitLine[1])
+                orders = [int(order) for order in orders]
+                if len(orders) == 0:
+                    print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'")
+                    orders = [1]
+            except ValueError:
+                print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'")
+                orders = [1]
+        if "width" in line:
+            try:
+                width = int(splitLine[1])
+            except ValueError:
+                print("invalid type for width. Defaulting to '8'")
+                width = 8
+        if "cutoff" in line:
+            try:
+                cutoff = int(splitLine[1])
+            except ValueError:
+                if "None" not in splitLine[1]:
+                    print("invalid type for cutoff. Defaulting to '1'")
+                cutoff = 1
+        if "maxPan" in line:
+            try:
+                maxPan = int(splitLine[1])
+            except ValueError:
+                if "None" not in splitLine[1]:
+                    print("invalid type for maxPan. Defaulting to 'None'")
+                maxPan = None
+        if "pntBounds" in line:
+            try:
+                pntBounds = stringToList(splitLine[1])
+                pntBounds = [int(pntBound) for pntBound in pntBounds]
+                if len(pntBounds) == 0:
+                    print("The pntBounds provided is invalid. Defaulting to 'None'")
+                    pntBounds = None
+            except ValueError:
+                if "None" not in splitLine[1]:
+                    print("The pntBounds provided is invalid. Defaulting to 'None'")
+                pntBounds = None
+        if "stateBounds" in line:
+            try:
+                stateBounds = stringToList(splitLine[1])
+                stateBounds = [int(stateBound) for stateBound in stateBounds]
+                if len(stateBounds) == 0:
+                    print("The stateBounds provided is invalid. Defaulting to 'None'")
+                    stateBounds = None
+            except ValueError:
+                if "None" not in splitLine[1]:
+                    print("The stateBounds provided is invalid. Defaulting to 'None'")
+                stateBounds = None
+        if "nthreads" in line:
+            try:
+                nthreads = int(splitLine[1])
+            except ValueError:
+                print("Invalid nthread size. Defaulting to 1.")
+                nthreads = 1
+        if "makePos" in line:
+            try:
+                makePos = bool(splitLine[1])
+            except ValueError:
+                print("Invalid makePos. Defaulting to False.")
+                makePos = False
+        if "doShuffle" in line:
+            try:
+                doShuffle = bool(splitLine[1])
+            except ValueError:
+                print("Invalid doShuffle. Defaulting to False.")
+                doShuffle = False
+    if width <= 0 or width <= max(orders):
+        print(
+            "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
+        width = max(orders) + 3
+    configer.close()
+    return orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
 
 
 def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle):

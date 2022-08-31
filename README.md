@@ -120,7 +120,7 @@ If your data is not converging and/or the order of states is not accurate, there
 
 - Try changing the configuration parameters in the config file. You can experiment with different values for the 'orders', 'width', 'cutoff', and 'maxPan' parameters to see if that helps convergence and accuracy. 
 
-    - In almost all cases, the default value of [1] for 'orders' gives the correct behavior. Thus value should be the last to be experiemented with.
+    - In almost all cases, the default value of [1] for 'orders' gives the correct behavior. This value should be the last to be experiemented with.
     - It's usually ideal to have a large width with a small spacing of points; this helps capture more nonlocal information of the state. However, this will increase the cost reordering. 
     - The 'cutoff' should be small since points towards the right will often be sorted inaccurately, however sometimes a value greater than 1 may give better results.
     - The 'maxPan' value defaults to None which puts no limits on how much the sliding window for finite differences pivots around a central point. It can help to set a small value for this, so fewer combinations of points are considered to compute the change of energy w.r.t a state swapping.

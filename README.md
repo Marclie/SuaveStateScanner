@@ -1,4 +1,3 @@
-
 ![Alt text](suave.svg)
 
 [SuaveStateScanner] - A tool for excited electronic state reordering
@@ -7,8 +6,7 @@
 Introduction
 ------------
 
-This tool takes a sequence of points for multiple electronic states with energies and properties and reorders them such
-that the energies with properties are continuous for each state. This is done by defining n-point finite differences along a
+This tool takes a sequence of points for multiple electronic states with energies and properties and reorders them so that each state is continuous for these quantities. This script reorders states by defining n-point finite differences along a
 sliding window centered at each point. The point is swapped with all states, and the state that is most continuous at
 that point is kept.
 
@@ -16,19 +14,18 @@ This is useful, for example, in electronic structure calculations where excited 
 w.r.t their properties. This can help identify the symmetry of electronic states without explicitly running a symmetry
 calculation.
 
-This is a general mathematical tool to enforce continuity of any set of states along a set of points with quantities
-that need the states to be continuous along their points. This will only work well for data that is inherently
-continuous with closely spaced points.
+This is a general mathematical tool to enforce the continuity of any states along a set of points with quantities
+that need the conditions to be continuous along their points. This will only work well for inherently continuous data with closely spaced points.
 
 
 Usage
 -----
 
-To use this tool, simply run:
+To use this tool, run:
 
     python suave_state_scanner.py <infile> <outfile> <numStates> [<configFile>]
 
-This will output the new energy ordering from \<infile\> to \<outfile\>, with the reaction coordinate as the first row. During the reordering procedure, the files "tempInput.csv" and "tempOutput.csv" are generated. "tempOutput.csv" stores the output at any given iteration for the states, which is used to track the progress of the reordering. "tempInput.csv" stores all the state information for each point in a file that can be used to restart this script.
+This will output the new energy ordering from \<infile\> to \<outfile\>, with the reaction coordinate as the first row. The files "tempInput.csv" and "tempOutput.csv" are generated during the reordering procedure. The "tempInput.csv" file stores all the state information for each point in a file that the user can use to restart this script. The "tempOutput.csv" file stores the output at any given iteration for the states, which is used to track the progress of the reordering.
 
 Arguments
 ---------
@@ -37,7 +34,7 @@ Arguments
   and properties.
 
 * `outfile` - The name of the output file. This file will be filled with rows corresponding to the reaction coordinate
-  and then by state, with the energy of each state printed along the columns.
+  and then by state, with each state's energy printed along the columns.
 
 * `numStates` - The number of states in the input file.
 
@@ -49,7 +46,7 @@ Input File Format
 
 The file is assumed to contain a sequence of points for multiple states with energies and properties. The file will be
 filled with rows corresponding to the reaction coordinate and then by state, with the energy and features of each state
-printed along the columns. The first column must be the reaction coordinate. The second column must be the energy of the state, or some other target variable.
+printed along the columns. The first column must be the reaction coordinate. The second column must be the state's energy or some other target variable.
 
     rc1 energy1 feature1.1 feature1.2 --->
     rc1 energy2 feature2.1 feature2.2 --->
@@ -79,10 +76,10 @@ All configurations in the configuration file are optional and are defined as fol
 
 * `orders` - The 'orders' parameter defines the orders of derivatives desired for computation.
    This parameter is required and must be a list of integers.
-   If this parameter is not provided, the default value '[1]' will be used. (default: [1])
+   The default value '[1]' will be used if this parameter is not provided. (default: [1])
 
 * `width` - The 'width' parameter defines the width of the stencil used for finite differences.
-   This parameter is optional and must be a positive integer greater than max order.
+   This parameter is optional and must be a positive integer greater than the max order.
    If this parameter is not provided, the default value '8' or 'max(orders)+3' will be used. (default: 8)
 
 * `cutoff` - The 'cutoff' parameter defines the number of points from the right of the center that is included in the stencils.
@@ -115,6 +112,24 @@ All configurations in the configuration file are optional and are defined as fol
   structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed
   by SuaveStateScanner as input but isn't strictly necessary so default value is False. (default: False)
 
+Troubleshooting
+------------
+If your data is not converging and/or the order of states is not accurate, there are a few things you can try:
+
+- Make sure that your data is continuous at each point and that the points are closely spaced. This tool will not work well with discontinuous data or has widely spaced points.
+
+- Try changing the configuration parameters in the config file. You can experiment with different values for the 'orders', 'width', 'cutoff', and 'maxPan' parameters to see if that helps convergence and accuracy. 
+
+    - In almost all cases, the default value of [1] for 'orders' gives the correct behavior. Thus value should be the last to be experiemented with.
+    - It's usually ideal to have a large width with a small spacing of points; this helps capture more nonlocal information of the state. However, this will increase the cost reordering. 
+    - The 'cutoff' should be small since points towards the right will often be sorted inaccurately, however sometimes a value greater than 1 may give better results.
+    - The 'maxPan' value defaults to None which puts no limits on how much the sliding window for finite differences pivots around a central point. It can help to set a small value for this, so fewer combinations of points are considered to compute the change of energy w.r.t a state swapping.
+
+- Experiement with using different properties to describe each state. Some properties will contribute more to the calculation of the finite differences than others, or some properties may be less continuous than others at each point (i.e. x-, y- transition dipoles that can mix arbitrarily for c1-symmetry calculations). It may help to normalize all properties for each state so properties are treated on equal footing or enable the 'makePos' flag in the config file to eliminate dependence on sign.
+
+- Try shuffling the order of energy eigenvalues for each state along each point sampled from electronic structure calculations or other types of calculations. This can sometimes improve performance on data processed by SuaveStateScanner as input, where nonlocal information from the initial configuration prevents states from being swapped. To do this, simply set the 'doShuffle' parameter to True in the config file.
+
+Make sure to plot the guess ordering at different iterations from the 'tempOutput.csv' file. This can help you recognize if a set of parameters will work or not before waiting for the reordering procedure to terminate (procedure will repeat the scan over all points for the number of points squared).
 
 How to cite
 ------------------

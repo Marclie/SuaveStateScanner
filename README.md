@@ -10,11 +10,11 @@ This tool takes a sequence of points for multiple electronic states with energie
 sliding window centered at each point. The point is swapped with all states, and the state that is most continuous at
 that point is kept.
 
-This is useful, for example, in electronic structure calculations where excited state energies are often discontinuous
-w.r.t their properties. This can help identify the symmetry of electronic states without explicitly running a symmetry
+This script is useful, for example, in electronic structure calculations where excited state energies are often discontinuous
+w.r.t their properties. The script can help identify the symmetry of electronic states without explicitly running a symmetry
 calculation.
 
-This is a general mathematical tool to enforce the continuity of any states along a set of points with quantities
+The script is a general mathematical tool to enforce the continuity of any states along a set of points with quantities
 that need the conditions to be continuous along their points. This will only work well for inherently continuous data with closely spaced points.
 
 

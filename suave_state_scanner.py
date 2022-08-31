@@ -16,6 +16,7 @@
 
 import copy as cp
 import sys
+import os
 
 import numba
 import numpy as np
@@ -520,6 +521,7 @@ def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None
     """
 
     orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
+    os.environ["NUMBA_NUM_THREADS"] = str(nthreads)
     numba.set_num_threads(1 if nthreads is None else nthreads)
     Evals, Nvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle)
     sortEnergies(Evals, Nvals)

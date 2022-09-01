@@ -3,6 +3,17 @@
 [SuaveStateScanner] - A tool for excited electronic state reordering
 =======================================================================
 
+Table of Contents
+-----------------
+* [Introduction](#introduction)
+* [Usage](#usage)
+* [Arguments](#arguments)
+* [Input File Format](#input-file-format)
+* [Configuration File Format](#configuration-file-format)
+* [Troubleshooting](#troubleshooting)
+* [How to cite](#how-to-cite)
+
+
 Introduction
 ------------
 
@@ -36,7 +47,7 @@ Arguments
 * `outfile` - The name of the output file. This file will be filled with rows corresponding to the reaction coordinate
   and then by state, with each state's energy printed along the columns.
 
-* `numStates` - The number of states in the input file.
+* `numStates` - The number of states in the input file for each point in the reaction coordinate.
 
 * `configPath` (optional) - This is the path to a configuration file that will set up parameters for the stencils used
   to enforce continuity of states. If not specified, default values will be set (default: None)
@@ -74,8 +85,7 @@ doShuffle = False
 
 All configurations in the configuration file are optional and are defined as follows:
 
-* `orders` - The 'orders' parameter defines the orders of derivatives desired for computation.
-   This parameter is required and must be a list of integers.
+* `orders` - The 'orders' parameter defines the orders of derivatives desired for computation. This parameter must be a list of integers.
    The default value '[1]' will be used if this parameter is not provided. (default: [1])
 
 * `width` - The 'width' parameter defines the width of the stencil used for finite differences.
@@ -121,7 +131,7 @@ If your data is not converging and/or the order of states is not accurate, there
 - Try changing the configuration parameters in the config file. You can experiment with different values for the 'orders', 'width', 'cutoff', and 'maxPan' parameters to see if that helps convergence and accuracy. 
 
     - In almost all cases, the default value of [1] for 'orders' gives the correct behavior. This value should be the last to be experiemented with.
-    - It's usually ideal to have a large width with a small spacing of points; this helps capture more nonlocal information of the state. However, this will increase the cost reordering. 
+    - It's usually ideal to have a large width with a small spacing of points; this helps capture more nonlocal information of the state. However, this will increase the cost of reordering. 
     - The 'cutoff' should be small since points towards the right will often be sorted inaccurately, however sometimes a value greater than 1 may give better results.
     - The 'maxPan' value defaults to None which puts no limits on how much the sliding window for finite differences pivots around a central point. It can help to set a small value for this, so fewer combinations of points are considered to compute the change of energy w.r.t a state swapping.
 
@@ -129,10 +139,10 @@ If your data is not converging and/or the order of states is not accurate, there
 
 - Try shuffling the order of energy eigenvalues for each state along each point sampled from electronic structure calculations or other types of calculations. This can sometimes improve performance on data processed by SuaveStateScanner as input, where nonlocal information from the initial configuration prevents states from being swapped. To do this, simply set the 'doShuffle' parameter to True in the config file.
 
-Make sure to plot the guess ordering at different iterations from the 'tempOutput.csv' file. This can help you recognize if a set of parameters will work or not before waiting for the reordering procedure to terminate (procedure will repeat the scan over all points for the number of points squared).
+Make sure to plot the guess ordering at different iterations from the 'tempOutput.csv' file. This can help you recognize if a set of parameters will work or not before waiting for the reordering procedure to terminate. The reordering procedure will repeat the scan over all points for the number of points squared, or until no more state swaps improve the continuity at each point. For degenerate states with identical properties, this can sometimes cause issues where the two states swap with each other arbitrarily for each scan. In this case, it is ideal to terminate the calculation and use tempOutput.csv as the final result.
 
 How to cite
-------------------
+-----------
 
 When using SuaveStateScanner for research projects, please cite:
 

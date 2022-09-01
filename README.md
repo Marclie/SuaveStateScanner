@@ -25,8 +25,8 @@ This script is useful, for example, in electronic structure calculations where e
 w.r.t their properties. The script can help identify the symmetry of electronic states without explicitly running a symmetry
 calculation.
 
-The script is a general mathematical tool to enforce the continuity of any states along a set of points with quantities
-that need the conditions to be continuous along their points. This will only work well for inherently continuous data with closely spaced points.
+The script is a general mathematical tool to enforce the continuity of eigenvalues along a set of points with properties extracted from the eigenvectors
+that need to be continuous along some coordinate. This will only work well for inherently continuous data with closely spaced points.
 
 
 Usage

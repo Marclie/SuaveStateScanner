@@ -25,11 +25,11 @@ from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
 from nstencil import makeStencil
 
 
-def generateDerivatives(N, center, F, allPnts, minh, orders, width, cutoff, maxPan):
+def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, maxPan):
     """
     This function approximates the n-th order derivatives of a function, F, at a point, center.
     The derivatives are computed using a stencil of width, width.
-    The cutoff sets how many points to consider from the right of the center
+    The futurePnts sets how many points to consider from the right of the center
     the maxPan sets how far the window of size width can shift from the center point
     The stencil is centered at center and the derivatives are computed using the points in the stencil.
     The stencil is computed using the points in allPnts.
@@ -41,8 +41,8 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, cutoff, maxP
         width = N
     if maxPan is None:
         maxPan = N
-    if cutoff is None:
-        cutoff = N
+    if futurePnts is None:
+        futurePnts = N
 
     combinedStencils = {}
     setDiff = False
@@ -57,7 +57,7 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, cutoff, maxP
             s = []
             for i in range(width):
                 idx = (i + off)
-                if idx > cutoff:
+                if idx > futurePnts:
                     break
                 if 0 <= center + idx < N:
                     s.append(idx)
@@ -175,10 +175,22 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
     stateRepeatList = np.zeros(numStates)
 
     # set parameters from configuration file
-    orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
+    orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
+    print("\n\n\tConfiguration Parameters:\n")
+    print("orders", orders)
+    print("width", width)
+    print("futurePnts", futurePnts)
+    print("maxPan", maxPan)
+    print("stateBounds", stateBounds)
+    print("pntBounds", pntBounds)
+    print("nthreads", nthreads)
+    print("makePos", makePos)
+    print("doShuffle", doShuffle)
 
     if pntBounds is None:
-        pntBounds = [0, numPoints]
+        pntBounds = [1, numPoints]
+    if pntBounds[0] == 0 and futurePnts <= 0:
+        pntBounds[0] = 1
 
     # arrange states such that energy and amplitude norms are continuous
     numSweeps = numPoints ** 2
@@ -210,9 +222,9 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
                 while repeat <= repeatMax and itr < maxiter:
 
                     # nth order finite difference
-                    diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width, cutoff,
+                    diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width, futurePnts,
                                                 maxPan)
-                    diffN = generateDerivatives(numPoints, pnt, Nvals[state:], allPnts, minh, orders, width, cutoff,
+                    diffN = generateDerivatives(numPoints, pnt, Nvals[state:], allPnts, minh, orders, width, futurePnts,
                                                 maxPan)
 
                     if diffE.size == 0 or diffN.size == 0:
@@ -228,9 +240,9 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
                         Nvals[[state, i], pnt] = Nvals[[i, state], pnt]
 
                         # nth order finite difference
-                        diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width, cutoff,
+                        diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width, futurePnts,
                                                     maxPan)
-                        diffN = generateDerivatives(numPoints, pnt, Nvals[state:], allPnts, minh, orders, width, cutoff,
+                        diffN = generateDerivatives(numPoints, pnt, Nvals[state:], allPnts, minh, orders, width, futurePnts,
                                                     maxPan)
 
                         if diffE.size == 0 or diffN.size == 0:
@@ -349,7 +361,7 @@ def stringToList(string):
 def applyConfig(configPath=None):
     orders = [1]
     width = 8
-    cutoff = 1
+    futurePnts = 0
     maxPan = None
     stateBounds = None
     pntBounds = None
@@ -357,7 +369,7 @@ def applyConfig(configPath=None):
     makePos = False
     doShuffle = False
     if configPath is None:
-        return orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
+        return orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
 
     configer = open(configPath, 'r')
     for line in configer.readlines():
@@ -381,13 +393,13 @@ def applyConfig(configPath=None):
             except ValueError:
                 print("invalid type for width. Defaulting to '8'")
                 width = 8
-        if "cutoff" in line:
+        if "futurePnts" in line:
             try:
-                cutoff = int(splitLine[1])
+                futurePnts = int(splitLine[1])
             except ValueError:
                 if "None" not in splitLine[1]:
-                    print("invalid type for cutoff. Defaulting to '1'")
-                cutoff = 1
+                    print("invalid type for futurePnts. Defaulting to '0'")
+                futurePnts = 0
         if "maxPan" in line:
             try:
                 maxPan = int(splitLine[1])
@@ -424,23 +436,15 @@ def applyConfig(configPath=None):
                 print("Invalid nthread size. Defaulting to 1.")
                 nthreads = 1
         if "makePos" in line:
-            try:
-                makePos = bool(splitLine[1])
-            except ValueError:
-                print("Invalid makePos. Defaulting to False.")
-                makePos = False
+            makePos = "True" == splitLine[1]
         if "doShuffle" in line:
-            try:
-                doShuffle = bool(splitLine[1])
-            except ValueError:
-                print("Invalid doShuffle. Defaulting to False.")
-                doShuffle = False
+            doShuffle = "True" == splitLine[1]
     if width <= 0 or width <= max(orders):
         print(
             "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
         width = max(orders) + 3
     configer.close()
-    return orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
+    return orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
 
 
 def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle):
@@ -519,7 +523,7 @@ def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None
     Returns None
     """
 
-    orders, width, cutoff, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
+    orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
     #os.environ["NUMBA_NUM_THREADS"] = str(nthreads)
     numba.set_num_threads(1 if nthreads is None else nthreads)
     Evals, Nvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle)

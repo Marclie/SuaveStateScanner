@@ -74,7 +74,7 @@ The configuration file is a text file with the following format:
 # This is a comment line. All lines starting with '#' will be ignored.
 orders = [1]
 width = 8
-cutoff = 1
+futurePnts = 0
 maxPan = None
 stateBounds = None
 pntBounds = None
@@ -92,14 +92,14 @@ All configurations in the configuration file are optional and are defined as fol
    This parameter is optional and must be a positive integer greater than the max order.
    If this parameter is not provided, the default value '8' or 'max(orders)+3' will be used. (default: 8)
 
-* `cutoff` - The 'cutoff' parameter defines the number of points from the right of the center that is included in the stencils.
+* `futurePnts` - The 'futurePnts' parameter defines the number of points from the right of the center that is included in the stencils.
    This parameter is optional and must be a positive integer. If this parameter is not provided, 
-   the default value '1' will be used. A small value is ideal since the script reorders points from left to right; 
-   points on the right will be unsorted making their derivatives mostly invalid (default: 1)
+   the default value '0' will be used. A zero/small value is ideal since the script reorders points from left to right; 
+   points on the right will be unsorted making their derivatives mostly invalid (default: 0)
 
 * `maxPan` - The 'maxPan' parameter defines the maximum number of times the stencil of size width can pivot 
    around the center point. This parameter is optional and must be a positive integer. If this parameter is not provided, 
-   the default value 'None' will be used, meaning there is no limit to the pivoting of the stencil.  (default: False)
+   the default value 'None' will be used, meaning there is no limit to the pivoting of the stencil.  (default: None)
 
 * `pntBounds` - The bounds of the points in the input file. If provided, this should be a list
   in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)

@@ -44,10 +44,13 @@ Arguments
 * `infile` - The name of the input file. This file should contain a sequence of points for multiple states with energies
   and properties.
 
+
 * `outfile` - The name of the output file. This file will be filled with rows corresponding to the reaction coordinate
   and then by state, with each state's energy printed along the columns.
 
+
 * `numStates` - The number of states in the input file for each point in the reaction coordinate.
+
 
 * `configPath` (optional) - This is the path to a configuration file that will set up parameters for the stencils used
   to enforce continuity of states. If not specified, default values will be set (default: None)
@@ -56,15 +59,15 @@ Input File Format
 -----------------
 
 The file is assumed to contain a sequence of points for multiple states with energies and properties. The file will be
-filled with rows corresponding to the reaction coordinate and then by state, with the energy and features of each state
+filled with rows corresponding to the reaction coordinate and then by state, with the energy and properties of each state
 printed along the columns. The first column must be the reaction coordinate. The second column must be the state's energy or some other target variable.
 
-    rc1 energy1 feature1.1 feature1.2 --->
-    rc1 energy2 feature2.1 feature2.2 --->
+    rc1 energy1 property1.1 property1.2 --->
+    rc1 energy2 property2.1 property2.2 --->
                     |
                     V
-    rc2 energy1 feature1.1 feature1.2 --->
-    rc2 energy2 feature2.1 feature2.2 --->
+    rc2 energy1 property1.1 property1.2 --->
+    rc2 energy2 property2.1 property2.2 --->
 
 Configuration File Format
 -------------------------
@@ -72,6 +75,7 @@ The configuration file is a text file with the following format:
 
 ```
 # This is a comment line. All lines starting with '#' will be ignored.
+printVar = 0 
 orders = [1]
 width = 8
 futurePnts = 0
@@ -85,24 +89,33 @@ doShuffle = False
 
 All configurations in the configuration file are optional and are defined as follows:
 
+* `printVar` - The index for the target variable to be printed to the output file. If this is not specified, the
+  default is to print the energy of the state. Other values will print a specific property for each state (default: 0) 
+
+
 * `orders` - The 'orders' parameter defines the orders of derivatives desired for computation. This parameter must be a list of integers.
    The default value '[1]' will be used if this parameter is not provided. (default: [1])
+
 
 * `width` - The 'width' parameter defines the width of the stencil used for finite differences.
    This parameter is optional and must be a positive integer greater than the max order.
    If this parameter is not provided, the default value '8' or 'max(orders)+3' will be used. (default: 8)
+
 
 * `futurePnts` - The 'futurePnts' parameter defines the number of points from the right of the center that is included in the stencils.
    This parameter is optional and must be a positive integer. If this parameter is not provided, 
    the default value '0' will be used. A zero/small value is ideal since the script reorders points from left to right; 
    points on the right will be unsorted making their derivatives mostly invalid (default: 0)
 
+
 * `maxPan` - The 'maxPan' parameter defines the maximum number of times the stencil of size width can pivot 
    around the center point. This parameter is optional and must be a positive integer. If this parameter is not provided, 
    the default value 'None' will be used, meaning there is no limit to the pivoting of the stencil.  (default: None)
 
+
 * `pntBounds` - The bounds of the points in the input file. If provided, this should be a list
   in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
+
 
 * `stateBounds` - The bounds of the states in the input file. If provided, this should be a
   list in the form [statemin, statemax] specifying inclusive lower and
@@ -110,13 +123,16 @@ All configurations in the configuration file are optional and are defined as fol
   stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
   electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
 
+
 * `nthreads` - The number of numba threads to use (default: 1)
 
-* `makePos` - Whether to make all extracted features positive before sorting according to increasing energy
+
+* `makePos` - Whether to make all extracted properties positive before sorting according to increasing energy
   eigenvalue along each curve/trajectory/reaction path segment sampled during electronic structure calculations or other
-  types of calculations from which data was obtained as input to the SuaveStateScanner program. Making features positive
+  types of calculations from which data was obtained as input to the SuaveStateScanner program. Making properties positive
   can sometimes improve performance on data processed by SuaveStateScanner as input but isn't strictly necessary so
   default value is False. (default: False)
+
 
 * `doShuffle` - Whether to shuffle order or energy eigenvalues along each curve sampled from electronic
   structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed

@@ -27,12 +27,19 @@ from nstencil import makeStencil
 
 def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, maxPan):
     """
-    This function approximates the n-th order derivatives of a function, F, at a point, center.
-    The derivatives are computed using a stencil of width, width.
-    The futurePnts sets how many points to consider from the right of the center
-    the maxPan sets how far the window of size width can shift from the center point
-    The stencil is centered at center and the derivatives are computed using the points in the stencil.
-    The stencil is computed using the points in allPnts.
+    @brief This function approximates the n-th order derivatives of a the energies and properties at a point.
+    @param N: the number of points in the state
+    @param center: the index of the point to approximate the derivatives at
+    @param F: the energies and properties of the state to be reordered and each state above it across each point
+    @param allPnts: the reaction coordinate values of each point
+    @param minh: the minimum step size to use in the finite difference approximation
+    @param orders: the orders of the derivatives to approximate
+    @param width: the maximum width of the stencil to use in the finite difference approximation
+    @param futurePnts: the number of points to the right of the center to use in the finite difference approximation
+    @param maxPan: the maximum number of pivots of the sliding windows for the stencil to use in the 
+                   finite difference approximation
+    
+    @return: the n-th order finite differences of the energies and properties at the center point    
     """
 
     if orders is None:
@@ -112,48 +119,78 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, 
     return approxDeriv(F, diff, center, stencil, alphas, sN)
 
 
-# The function takes as input the sequence of points, the difference between the points, the center point,
-# the stencil, the coefficients and the size of the stencil.
-# The function returns the absolute value of the difference between the points
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def approxDeriv(F, diff, center, stencil, alphas, sN):
+    """
+    @brief This function approximates the n-th order derivatives of a the energies and properties 
+           at a point for a given stencil size.
+    @param F: the energies and properties of the state to be reordered and each state above it across each point
+    @param diff: the finite differences of the energies and properties at the center point
+    @param center: the index of the point to approximate the derivatives at
+    @param stencil: the stencil to use in the finite difference approximation
+    @param alphas: the coefficients of the stencil to use in the finite difference approximation
+    @param sN: the size of the stencil to use in the finite difference approximation
+    
+    @return: the n-th order finite differences of the energies and properties at the center point with the current stencil
+    """
+
+    #evaluate finite difference terms for each state
     for s in prange(sN):
         pnt = center + stencil[s]
         diff[:, s] = alphas[s] * F[:, pnt]
+
+    # sum finite difference terms for each state for current stencil.
+    # the absolute value of the finite differences of the energies and properties
+    # should be minimized for the best ordering metric
     return np.absolute(diff.sum(axis=1))
 
 
 # enforce ordering metric
 @njit(parallel=True, fastmath=True)
-def getMetric(diffE, diffN):
-    # mean approximate differences summed for each state
-    Esum = diffE.sum()
-    Nsum = diffN.mean()
-    return abs(Nsum * Esum)
+def getMetric(diffE, diffP):
+    """
+    @brief This function computes the ordering metric for a given set of finite differences.
+    @param diffE: the finite differences of the energies at the center point
+    @param diffP: the finite differences of the properties at the center point
+    
+    @return: the ordering metric for the given finite differences
+    """
+
+    # sum finite differences of all properties for each state
+    diffP = np.sum(diffP, axis=1)
+
+    # metric uses the sum of the product of the properties and energies for each state 
+    # to enforce the product rule of differentiation for the change in the ordering metric
+    return (diffE * diffP).sum()
 
 
-# sort the state such that the first point is in ascending energy order
-def sortEnergies(Evals, Nvals):
+def sortEnergies(Evals, Pvals):
+    """
+    @brief This function sorts the energies and properties of the state such that the first point is in ascending energy order.
+    @param Evals: the energies of the states to be reordered across each point
+    @param Pvals: the properties of the states to be reordered across each point
+
+    @return: the energies and properties of the states in ascending energy order of the first point
+    """
     idx = Evals[:, 0].argsort()
     Evals[:] = Evals[idx]
-    Nvals[:] = Nvals[idx]
+    Pvals[:] = Pvals[idx]
 
 
-def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=2, numStateRepeat=10):
-    # This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
-    #
-    # Inputs:
-    #   Evals: A 2D array of energies for each state at each point
-    #   Nvals: A 2D array of properties for each state at each point
-    #   allPnts: A 1D array of points
-    #   bounds: A 2D array of the start and end points to consider
-    #   maxiter: The maximum number of iterations to try to converge
-    #   repeatMax: The maximum number of times to repeat the same point
-    #   numStateRepeat: The maximum number of times to repeat the same state
-    #
-    # Outputs:
-    #   Evals: A reordered 2D array of energies for each state at each point
-    #   Nvals: A reordered 2D array of properties for each state at each point
+def arrangeStates(Evals, Pvals, allPnts, configPath=None, maxiter=-1, repeatMax=1, numStateRepeat=50):
+    """
+    @brief: This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
+    @param Evals: The energies for each state at each point
+    @param Pvals: The properties for each state at each point
+    @param allPnts: The sequence of points
+    @param configPath: The path to the configuration file
+    @param maxiter: The maximum number of iterations to perform
+    @param repeatMax: The maximum number of times to repeat the same state
+    @param numStateRepeat: The number of states to repeat
+    
+    @return: The reordered energies, properties and points    
+    """
+    
 
     numStates = Evals.shape[0]
     numPoints = Evals.shape[1]
@@ -169,14 +206,15 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
 
     # copy initial curve info
     lastEvals = cp.deepcopy(Evals)
-    lastNvals = cp.deepcopy(Nvals)
+    lastPvals = cp.deepcopy(Pvals)
 
     # containers to count unmodified states
     stateRepeatList = np.zeros(numStates)
 
     # set parameters from configuration file
-    orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
+    printVar, orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
     print("\n\n\tConfiguration Parameters:\n")
+    print("printVar", printVar)
     print("orders", orders)
     print("width", width)
     print("futurePnts", futurePnts)
@@ -197,8 +235,8 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
     for sweep in range(numSweeps):
         for state in range(numStates):
             stateEvals = cp.deepcopy(Evals)
-            stateNvals = cp.deepcopy(Nvals)
-            saveOrder(Evals, Nvals, allPnts)
+            statePvals = cp.deepcopy(Pvals)
+            saveOrder(Evals, Pvals, allPnts, printVar)
             for pnt in range(pntBounds[0], pntBounds[1]):
                 if stateRepeatList[state] >= numStateRepeat:  # Modify
                     print("\n%%%%%%%%%%", "SWEEP ", sweep, "%%%%%%%%%%")
@@ -224,37 +262,37 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
                     # nth order finite difference
                     diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width, futurePnts,
                                                 maxPan)
-                    diffN = generateDerivatives(numPoints, pnt, Nvals[state:], allPnts, minh, orders, width, futurePnts,
+                    diffP = generateDerivatives(numPoints, pnt, Pvals[state:], allPnts, minh, orders, width, futurePnts,
                                                 maxPan)
 
-                    if diffE.size == 0 or diffN.size == 0:
+                    if diffE.size == 0 or diffP.size == 0:
                         continue
 
-                    diff = getMetric(diffE, diffN)
+                    diff = getMetric(diffE, diffP)
                     minDif = (diff, state)
 
                     # compare continuity differences from this state swapped with all other states
                     for i in range(state + 1, numStates):
                         # get energy and norm for each state at this point
                         Evals[[state, i], pnt] = Evals[[i, state], pnt]
-                        Nvals[[state, i], pnt] = Nvals[[i, state], pnt]
+                        Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
 
                         # nth order finite difference
                         diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width, futurePnts,
                                                     maxPan)
-                        diffN = generateDerivatives(numPoints, pnt, Nvals[state:], allPnts, minh, orders, width, futurePnts,
+                        diffP = generateDerivatives(numPoints, pnt, Pvals[state:], allPnts, minh, orders, width, futurePnts,
                                                     maxPan)
 
-                        if diffE.size == 0 or diffN.size == 0:
+                        if diffE.size == 0 or diffP.size == 0:
                             continue
 
-                        diff = getMetric(diffE, diffN)
+                        diff = getMetric(diffE, diffP)
 
                         if diff < minDif[0]:
                             minDif = (diff, i)
 
                         Evals[[state, i], pnt] = Evals[[i, state], pnt]
-                        Nvals[[state, i], pnt] = Nvals[[i, state], pnt]
+                        Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
 
                     if lastDif[1] == minDif[1]:
                         repeat += 1
@@ -266,7 +304,7 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
                     newState = minDif[1]
                     if state != newState:
                         Evals[[state, newState], pnt] = Evals[[newState, state], pnt]
-                        Nvals[[state, newState], pnt] = Nvals[[newState, state], pnt]
+                        Pvals[[state, newState], pnt] = Pvals[[newState, state], pnt]
 
                     lastDif = minDif
                     itr += 1
@@ -275,17 +313,17 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
                 else:
                     print(lastDif)
                 sys.stdout.flush()
-            delMax = stateDifference(Evals, Nvals, stateEvals, stateNvals, state)
+            delMax = stateDifference(Evals, Pvals, stateEvals, statePvals, state)
 
             if delMax < 1e-12:
                 stateRepeatList[state] += 1
             else:
                 stateRepeatList[state] = 0
             stateEvals = cp.deepcopy(Evals)
-            stateNvals = cp.deepcopy(Nvals)
+            statePvals = cp.deepcopy(Pvals)
 
         delEval = Evals - lastEvals
-        delNval = Nvals - lastNvals
+        delNval = Pvals - lastPvals
 
         delMax = delEval.max() + delNval.max()
         print("CONVERGENCE PROGRESS: {:e}".format(delMax))
@@ -293,72 +331,125 @@ def arrangeStates(Evals, Nvals, allPnts, configPath=None, maxiter=-1, repeatMax=
             print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax))
             break
         lastEvals = cp.deepcopy(Evals)
-        lastNvals = cp.deepcopy(Nvals)
-        sortEnergies(Evals, Nvals)
+        lastPvals = cp.deepcopy(Pvals)
+        sortEnergies(Evals, Pvals)
 
 
 @njit(parallel=True)
-def stateDifference(Evals, Nvals, stateEvals, stateNvals, state):
-    # This function will calculate the difference in the energy from a previous reordering to the current order
-    # This is used to determine if the current order is better than the previous order
+def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
+    """
+    @brief This function will calculate the difference in the energy from a previous reordering to the current order
+    @param Evals: The energy values for the current order
+    @param Pvals: The properties for the current order
+    @param stateEvals: The energy values for the previous order
+    @param statePvals: The properties for the previous order
+    @param state: The state that is being compared
+
+    @return delMax: The maximum difference between the current and previous order
+    """
+
     delEval = Evals[state] - stateEvals[state]
-    delNval = Nvals[state] - stateNvals[state]
+    delNval = Pvals[state] - statePvals[state]
     delMax = delEval.max() + delNval.max()
     return delMax
 
 
+# This function will randomize the state ordering for each point
 def shuffle_energy(curves):
-    # This function will randomize the state ordering for each point
+    """
+    @brief This function will randomize the state ordering for each point
+    @param curves: The energies and properties of each state at each point
+
+    @return: The states with randomized energy ordering
+    """
+
     for pnt in range(curves.shape[1]):
         np.random.shuffle(curves[:, pnt])
 
 
 # this function loads the state information of a reorder scan from a previous run of this script
 def loadPrevRun(numStates, numPoints, numColumns):
+    """
+    @brief This function will load the state information of a reorder scan from a previous run of this script
+    @param numStates: The number of states
+    @param numPoints: The number of points
+    @param numColumns: The number of columns in the file
+    """
+
     Ecurves = genfromtxt('Evals.csv')
-    Ncurves = genfromtxt('Nvals.csv')
+    Ncurves = genfromtxt('Pvals.csv')
     allPnts = genfromtxt('allPnts.csv')
 
     Evals = Ecurves.reshape((numStates, numPoints))
-    Nvals = Ncurves.reshape((numStates, numPoints, numColumns))
+    Pvals = Ncurves.reshape((numStates, numPoints, numColumns))
 
-    return Evals, Nvals, allPnts
+    return Evals, Pvals, allPnts
 
 
-# this function reformats the state information for saving
 @njit(parallel=True)
-def combineVals(Evals, Nvals, allPnts, tempInput):
+def combineVals(Evals, Pvals, allPnts, tempInput):
+    """
+    @brief This function will reformat the state information for saving
+    @param Evals: The energy values for the current order
+    @param Pvals: The properties for the current order
+    @param allPnts: The points that are being evaluated
+    @param tempInput: The input file for the current run
+
+    @return: The energy and properties for each state at each point
+    """
+
     numPoints = allPnts.shape[0]
     numStates = Evals.shape[0]
-    numFeat = Nvals.shape[2]
+    numFeat = Pvals.shape[2]
     for pnt in prange(numPoints):
         for state in prange(numStates):
             tempInput[pnt * numStates + state, 0] = allPnts[pnt]
             tempInput[pnt * numStates + state, 1] = Evals[state, pnt]
             for feat in prange(numFeat):
-                tempInput[pnt * numStates + state, feat + 2] = Nvals[state, pnt, feat]
+                tempInput[pnt * numStates + state, feat + 2] = Pvals[state, pnt, feat]
 
 
-# this function saves the state information of a reorder scan for a future run of this script
-def saveOrder(Evals, Nvals, allPnts):
-    tempInput = zeros((Nvals.shape[0] * Nvals.shape[1], Nvals.shape[2] + 2))
-    combineVals(Evals, Nvals, allPnts, tempInput)
+def saveOrder(Evals, Pvals, allPnts, printVar=0):
+    """
+    @brief This function will save the state information of a reorder scan for a future run of this script
+    @param Evals: The energy values for the current order
+    @param Pvals: The properties for the current order
+    @param allPnts: The points that are being evaluated
+    @param printVar: The index that determines which state information is saved
+
+    @return: The energy and properties for each state at each point written to a file "tempInput.csv"
+    """
+
+    tempInput = zeros((Pvals.shape[0] * Pvals.shape[1], Pvals.shape[2] + 2))
+    combineVals(Evals, Pvals, allPnts, tempInput)
 
     savetxt("tempInput.csv", tempInput, fmt='%20.12f')
 
     newCurvesList = []
-    for pnt in range(Evals.shape[1]):
-        newCurvesList.append(Evals[:, pnt])
+    for pnt in range(allPnts.shape[0]):
+        if printVar == 0:
+            newCurvesList.append(Evals[:, pnt])
+        else:
+            newCurvesList.append(Pvals[:, pnt, printVar - 1])
+
     newCurves = stack(newCurvesList, axis=1)
     newCurves = insert(newCurves, 0, allPnts, axis=0)
     savetxt('tempOutput.csv', newCurves, fmt='%20.12f')
 
-
+# this function will convert a string to a list of integers
 def stringToList(string):
     return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
 
 
 def applyConfig(configPath=None):
+    """
+    @brief This function will set parameters from the configuration file
+    @param configPath: The path to the configuration file
+
+    @return: The parameters from the configuration file and default values
+    """
+
+    printVar = 0
     orders = [1]
     width = 8
     futurePnts = 0
@@ -369,7 +460,7 @@ def applyConfig(configPath=None):
     makePos = False
     doShuffle = False
     if configPath is None:
-        return orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
+        return printVar, orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
 
     configer = open(configPath, 'r')
     for line in configer.readlines():
@@ -377,6 +468,12 @@ def applyConfig(configPath=None):
         if line[0] == "#":
             continue
         splitLine = line.split("=")
+        if "printVar" in line:
+            try:
+                printVar = int(splitLine[1])
+            except ValueError:
+                print("invalid index for variable to print. Defaulting to '0' for energy")
+                printVar = 0
         if "order" in line:
             try:
                 orders = stringToList(splitLine[1])
@@ -444,31 +541,33 @@ def applyConfig(configPath=None):
             "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
         width = max(orders) + 3
     configer.close()
-    return orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
+    return printVar, orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
 
 
-def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle):
-    # This function extracts state information from a file
-    #
-    # infile: the name of the file containing the data
-    # numStates: the number of states in the file
-    # stateBounds: the range of states to extract from the file
-    # makePos: if True, the properties are made positive
-    # doShuffle: if True, the energies are shuffled
-    #
-    # The file is assumed to contain a sequence of points for multiple states with energies and properties
-    # The function reorders the data such that the energies and properties are continuous.
-    # The file will be filled with rows corresponding to the reaction coordinate and then by state,
-    # with the energy and features of each state printed along the columns
-    #
-    #     rc1 energy1 feature1.1 feature1.2 --->
-    #     rc1 energy2 feature2.1 feature2.2 --->
-    #                     |
-    #                     V
-    #     rc2 energy1 feature1.1 feature1.2 --->
-    #     rc2 energy2 feature2.1 feature2.2 --->
-    #
-    # The function returns the energies, properties, and points
+def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=0):
+    """
+    This function extracts state information from a file
+
+    infile: the name of the file containing the data
+    numStates: the number of states in the file
+    stateBounds: the range of states to extract from the file
+    makePos: if True, the properties are made positive
+    doShuffle: if True, the energies are shuffled
+
+    The file is assumed to contain a sequence of points for multiple states with energies and properties
+    The function reorders the data such that the energies and properties are continuous.
+    The file will be filled with rows corresponding to the reaction coordinate and then by state,
+    with the energy and features of each state printed along the columns
+
+        rc1 energy1 feature1.1 feature1.2 --->
+        rc1 energy2 feature2.1 feature2.2 --->
+                        |
+                        V
+        rc2 energy1 feature1.1 feature1.2 --->
+        rc2 energy2 feature2.1 feature2.2 --->
+
+    The function returns the energies, properties, and points
+    """
 
     if stateBounds is None:
         stateBounds = [0, numStates]
@@ -488,50 +587,55 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle):
 
     allPnts = curves[0, :, 0]
     Evals = curves[stateBounds[0]:stateBounds[1], :, 1]
-    Nvals = curves[stateBounds[0]:stateBounds[1], :, 2:]
+    Pvals = curves[stateBounds[0]:stateBounds[1], :, 2:]
     if makePos:
-        Nvals = abs(Nvals)
+        Pvals = abs(Pvals)
+    if printVar > numColumns - 1:
+        raise ValueError("Invalid printVar index. Must be less than the number of columns "
+                         "in the input file (excluding the reaction coordinate).")
 
-    return Evals, Nvals, allPnts
+    return Evals, Pvals, allPnts
 
 
 def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None):
     """
-    This function takes a sequence of points for multiple states with energies and properties
+    @brief: This function takes a sequence of points for multiple states with energies and properties
     and reorders them such that the energies and properties are continuous
 
     Parameters
     ----------
-    :param infile : str
+    @param infile : str
         The name of the input file
-    :param outfile : str
+    @param outfile : str
         The name of the output file
-    :param numStates : int
+    @param numStates : int
         The number of states
-    :param configPath : The path of the configuration file for setting stencil properties
-    :param bounds : list of tuples, optional
+    @param configPath : The path of the configuration file for setting stencil properties
+    @param bounds : list of tuples, optional
         The bounds of the points
-    :param stateBounds : list of tuples, optional
+    @param stateBounds : list of tuples, optional
         The bounds of the states
-    :param nthreads : int, optional
+    @param nthreads : int, optional
         The number of threads to use
-    :param makePos : bool, optional
+    @param makePos : bool, optional
         Whether to make the properties positive
-    :param doShuffle : bool, optional
+    @param doShuffle : bool, optional
         Whether to shuffle the points
 
     Returns None
     """
 
-    orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
-    #os.environ["NUMBA_NUM_THREADS"] = str(nthreads)
+    printVar, orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
     numba.set_num_threads(1 if nthreads is None else nthreads)
-    Evals, Nvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle)
-    sortEnergies(Evals, Nvals)
-    arrangeStates(Evals, Nvals, allPnts, configPath, maxiter=200, repeatMax=2, numStateRepeat=50)
+    Evals, Pvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar)
+    sortEnergies(Evals, Pvals)
+    arrangeStates(Evals, Pvals, allPnts, configPath, maxiter=200, repeatMax=1, numStateRepeat=50)
     newCurvesList = []
-    for pnt in range(Evals.shape[1]):
-        newCurvesList.append(Evals[:, pnt])
+    for pnt in range(allPnts.shape[0]):
+        if printVar == 0:
+            newCurvesList.append(Evals[:, pnt])
+        else:
+            newCurvesList.append(Pvals[:, pnt, printVar - 1])
     newCurves = stack(newCurvesList, axis=1)
     newCurves = insert(newCurves, 0, allPnts, axis=0)
     savetxt(outfile, newCurves, fmt='%20.12f')

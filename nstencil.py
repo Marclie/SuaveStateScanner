@@ -31,7 +31,7 @@ LOOKUP_TABLE = np.array([
     121645100408832000, 2432902008176640000], dtype='int64')
 
 
-@njit(parallel=False)
+@njit(parallel=False, cache=True)
 def numbaFactorial(n):
     # This function is a numba implementation of the factorial function.
     if n > 20:
@@ -39,7 +39,7 @@ def numbaFactorial(n):
     return LOOKUP_TABLE[n]
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def makeStencil(N, s, d):
     S = np.zeros((N, N))
     for i in prange(N):

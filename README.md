@@ -17,7 +17,7 @@ Table of Contents
 Introduction
 ------------
 
-This tool takes a sequence of points for multiple electronic states with energies and properties and reorders them so that each state is continuous for these quantities. This script reorders states by defining n-point finite differences along a
+This tool takes a sequence of points for multiple electronic states with energies and properties and reorders them so that each state is continuous for these quantities. This script reorders states by defining [n-point finite differences](https://en.wikipedia.org/wiki/Finite_difference_coefficient) along a
 sliding window centered at each point. The point is swapped with all states, and the state that is most continuous at
 that point is kept.
 
@@ -75,15 +75,16 @@ The configuration file is a text file with the following format:
 
 ```
 # This is a comment line. All lines starting with '#' will be ignored.
-printVar = 0 
+printVar = 0
 orders = [1]
-width = 8
+width = 5
 futurePnts = 0
 maxPan = None
 stateBounds = None
+maxStateRepeat = None
 pntBounds = None
-nthreads = 1
-makePos = False
+nthreads = 7
+makePos = True
 doShuffle = False
 ```
 
@@ -122,6 +123,9 @@ All configurations in the configuration file are optional and are defined as fol
   upper bounds on indices identifying individual electronic states within an ensemble (e.g., if numStates=3 then
   stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
   electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
+
+
+* `maxStateRepeat` - The maximum number of times a state can be repeated without changes in reordering procedure. If this parameter is not provided, the default value 'None' will be used, meaning there is no limit to the number of times a state can be repeated. (default: None)
 
 
 * `nthreads` - The number of numba threads to use (default: 1)

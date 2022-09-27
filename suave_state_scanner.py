@@ -23,6 +23,8 @@ from numba import njit, prange, set_num_threads
 from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
 
 from nstencil import makeStencil
+import matplotlib
+from matplotlib import pyplot as plt
 
 
 def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, maxPan):
@@ -134,7 +136,7 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
     @return: the n-th order finite differences of the energies and properties at the center point with the current stencil
     """
 
-    #evaluate finite difference terms for each state
+    # evaluate finite difference terms for each state
     for s in prange(sN):
         pnt = center + stencil[s]
         diff[:, s] = alphas[s] * F[:, pnt]
@@ -146,7 +148,7 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
 
 
 # enforce ordering metric
-@njit(parallel=True, fastmath=True)
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def getMetric(diffE, diffP):
     """
     @brief This function computes the ordering metric for a given set of finite differences.
@@ -177,25 +179,20 @@ def sortEnergies(Evals, Pvals):
     Pvals[:] = Pvals[idx]
 
 
-def arrangeStates(Evals, Pvals, allPnts, configPath=None, maxiter=-1, repeatMax=1, numStateRepeat=50):
+def arrangeStates(Evals, Pvals, allPnts, configPath=None):
     """
     @brief: This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
     @param Evals: The energies for each state at each point
     @param Pvals: The properties for each state at each point
     @param allPnts: The sequence of points
     @param configPath: The path to the configuration file
-    @param maxiter: The maximum number of iterations to perform
-    @param repeatMax: The maximum number of times to repeat the same state
-    @param numStateRepeat: The number of states to repeat
     
     @return: The reordered energies, properties and points    
     """
-    
 
+    # get dimensions of data
     numStates = Evals.shape[0]
     numPoints = Evals.shape[1]
-    if maxiter is None:
-        maxiter = numStates + 1
 
     # find smallest step size
     minh = np.inf
@@ -212,18 +209,23 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None, maxiter=-1, repeatMax=
     stateRepeatList = np.zeros(numStates)
 
     # set parameters from configuration file
-    printVar, orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
-    print("\n\n\tConfiguration Parameters:\n")
-    print("printVar", printVar)
-    print("orders", orders)
-    print("width", width)
-    print("futurePnts", futurePnts)
-    print("maxPan", maxPan)
-    print("stateBounds", stateBounds)
-    print("pntBounds", pntBounds)
-    print("nthreads", nthreads)
-    print("makePos", makePos)
-    print("doShuffle", doShuffle)
+    printVar, orders, width, futurePnts, maxPan, \
+    stateBounds, maxStateRepeat, pntBounds, nthreads, \
+    makePos, doShuffle = \
+        applyConfig(configPath)
+
+    print("\n\n\tConfiguration Parameters:\n", flush=True)
+    print("printVar", printVar, flush=True)
+    print("orders", orders, flush=True)
+    print("width", width, flush=True)
+    print("futurePnts", futurePnts, flush=True)
+    print("maxPan", maxPan, flush=True)
+    print("stateBounds", stateBounds, flush=True)
+    print("maxStateRepeat", maxStateRepeat, flush=True)
+    print("pntBounds", pntBounds, flush=True)
+    print("nthreads", nthreads, flush=True)
+    print("makePos", makePos, flush=True)
+    print("doShuffle", doShuffle, flush=True)
 
     if pntBounds is None:
         pntBounds = [1, numPoints]
@@ -237,26 +239,31 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None, maxiter=-1, repeatMax=
             stateEvals = cp.deepcopy(Evals)
             statePvals = cp.deepcopy(Pvals)
             saveOrder(Evals, Pvals, allPnts, printVar)
-            for pnt in range(pntBounds[0], pntBounds[1]):
-                if stateRepeatList[state] >= numStateRepeat:  # Modify
-                    print("\n%%%%%%%%%%", "SWEEP ", sweep, "%%%%%%%%%%")
-                    print("@@@@@@@", "STATE", state, "@@@@@@@@@")
-                    stateRepeatList[state] += 1
-                    if stateRepeatList[state] >= numStateRepeat + 5:
-                        stateRepeatList[state] = 0
-                        print("###", "POINT", pnt, "###  -- retest")
-                    else:
-                        print("###", "POINT ", pnt, "###  -- Converged")
-                        continue
+
+            # check if state has been modified too many times without improvement
+            if stateRepeatList[state] >= maxStateRepeat > 0:
+                stateRepeatList[state] += 1
+                if stateRepeatList[state] < maxStateRepeat + 5:
+                    # if so, ignore it for 5 sweeps
+                    print("###", "Skipping", "###", flush=True)
+                    continue
                 else:
-                    print("\n%%%%%%%%%%", "SWEEP ", sweep, "%%%%%%%%%%")
-                    print("@@@@@@@", "STATE", state, "@@@@@@@@@")
-                    print("###", "POINT", pnt, "###")
+                    # if state has been ignored for too long, test it again
+                    stateRepeatList[state] = 0
+
+            for pnt in range(pntBounds[0], pntBounds[1]):
+                sys.stdout.flush()
+                print("\n%%%%%%%%%%", "SWEEP ", sweep, "%%%%%%%%%%", flush=True)
+                print("@@@@@@@", "STATE", state, "@@@@@@@@@", flush=True)
+                print("###", "POINT", pnt, "###", flush=True)
+
                 repeat = 0
+                repeatMax = 1
+                maxiter = 500
                 itr = 0
                 lastDif = (inf, state)
 
-                # selection Sort algorithm to arrange states
+                # selection Sort algorithm to rearrange states
                 while repeat <= repeatMax and itr < maxiter:
 
                     # nth order finite difference
@@ -278,9 +285,11 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None, maxiter=-1, repeatMax=
                         Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
 
                         # nth order finite difference
-                        diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width, futurePnts,
+                        diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width,
+                                                    futurePnts,
                                                     maxPan)
-                        diffP = generateDerivatives(numPoints, pnt, Pvals[state:], allPnts, minh, orders, width, futurePnts,
+                        diffP = generateDerivatives(numPoints, pnt, Pvals[state:], allPnts, minh, orders, width,
+                                                    futurePnts,
                                                     maxPan)
 
                         if diffE.size == 0 or diffP.size == 0:
@@ -309,9 +318,9 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None, maxiter=-1, repeatMax=
                     lastDif = minDif
                     itr += 1
                 if itr >= maxiter:
-                    print("WARNING: state could not converge. Increase maxiter or maxRepeat")
+                    print("WARNING: state could not converge. Increase maxiter or repeatMax", flush=True)
                 else:
-                    print(lastDif)
+                    print(lastDif, flush=True)
                 sys.stdout.flush()
             delMax = stateDifference(Evals, Pvals, stateEvals, statePvals, state)
 
@@ -319,23 +328,21 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None, maxiter=-1, repeatMax=
                 stateRepeatList[state] += 1
             else:
                 stateRepeatList[state] = 0
-            stateEvals = cp.deepcopy(Evals)
-            statePvals = cp.deepcopy(Pvals)
 
         delEval = Evals - lastEvals
         delNval = Pvals - lastPvals
 
         delMax = delEval.max() + delNval.max()
-        print("CONVERGENCE PROGRESS: {:e}".format(delMax))
+        print("CONVERGENCE PROGRESS: {:e}".format(delMax), flush=True)
         if delMax < 1e-12:
-            print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax))
+            print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
             break
         lastEvals = cp.deepcopy(Evals)
         lastPvals = cp.deepcopy(Pvals)
         sortEnergies(Evals, Pvals)
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
     """
     @brief This function will calculate the difference in the energy from a previous reordering to the current order
@@ -357,13 +364,13 @@ def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
 # This function will randomize the state ordering for each point
 def shuffle_energy(curves):
     """
-    @brief This function will randomize the state ordering for each point
+    @brief This function will randomize the state ordering for each point, except the first point
     @param curves: The energies and properties of each state at each point
 
     @return: The states with randomized energy ordering
     """
 
-    for pnt in range(curves.shape[1]):
+    for pnt in range(1, curves.shape[1]):
         np.random.shuffle(curves[:, pnt])
 
 
@@ -436,6 +443,7 @@ def saveOrder(Evals, Pvals, allPnts, printVar=0):
     newCurves = insert(newCurves, 0, allPnts, axis=0)
     savetxt('tempOutput.csv', newCurves, fmt='%20.12f')
 
+
 # this function will convert a string to a list of integers
 def stringToList(string):
     return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
@@ -451,7 +459,7 @@ def applyConfig(configPath=None):
 
     printVar = 0
     orders = [1]
-    width = 8
+    width = 5
     futurePnts = 0
     maxPan = None
     stateBounds = None
@@ -459,8 +467,9 @@ def applyConfig(configPath=None):
     nthreads = 1
     makePos = False
     doShuffle = False
+    maxStateRepeat = -1
     if configPath is None:
-        return printVar, orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
+        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, nthreads, makePos, doShuffle
 
     configer = open(configPath, 'r')
     for line in configer.readlines():
@@ -472,65 +481,76 @@ def applyConfig(configPath=None):
             try:
                 printVar = int(splitLine[1])
             except ValueError:
-                print("invalid index for variable to print. Defaulting to '0' for energy")
+                print("invalid index for variable to print. Defaulting to '0' for energy", flush=True)
                 printVar = 0
         if "order" in line:
             try:
                 orders = stringToList(splitLine[1])
                 orders = [int(order) for order in orders]
                 if len(orders) == 0:
-                    print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'")
+                    print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'",
+                          flush=True)
                     orders = [1]
             except ValueError:
-                print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'")
+                print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'",
+                      flush=True)
                 orders = [1]
         if "width" in line:
             try:
                 width = int(splitLine[1])
             except ValueError:
-                print("invalid type for width. Defaulting to '8'")
+                print("invalid type for width. Defaulting to '8'", flush=True)
                 width = 8
         if "futurePnts" in line:
             try:
                 futurePnts = int(splitLine[1])
             except ValueError:
                 if "None" not in splitLine[1]:
-                    print("invalid type for futurePnts. Defaulting to '0'")
+                    print("invalid type for futurePnts. Defaulting to '0'", flush=True)
                 futurePnts = 0
         if "maxPan" in line:
             try:
                 maxPan = int(splitLine[1])
             except ValueError:
                 if "None" not in splitLine[1]:
-                    print("invalid type for maxPan. Defaulting to 'None'")
+                    print("invalid type for maxPan. Defaulting to 'None'", flush=True)
                 maxPan = None
         if "pntBounds" in line:
             try:
                 pntBounds = stringToList(splitLine[1])
                 pntBounds = [int(pntBound) for pntBound in pntBounds]
                 if len(pntBounds) == 0:
-                    print("The pntBounds provided is invalid. Defaulting to 'None'")
+                    print("The pntBounds provided is invalid. Defaulting to 'None'", flush=True)
                     pntBounds = None
             except ValueError:
                 if "None" not in splitLine[1]:
-                    print("The pntBounds provided is invalid. Defaulting to 'None'")
+                    print("The pntBounds provided is invalid. Defaulting to 'None'", flush=True)
                 pntBounds = None
         if "stateBounds" in line:
             try:
                 stateBounds = stringToList(splitLine[1])
                 stateBounds = [int(stateBound) for stateBound in stateBounds]
                 if len(stateBounds) == 0:
-                    print("The stateBounds provided is invalid. Defaulting to 'None'")
+                    print("The stateBounds provided is invalid. Defaulting to 'None'", flush=True)
                     stateBounds = None
             except ValueError:
                 if "None" not in splitLine[1]:
-                    print("The stateBounds provided is invalid. Defaulting to 'None'")
+                    print("The stateBounds provided is invalid. Defaulting to 'None'", flush=True)
                 stateBounds = None
+        if "maxStateRepeat" in line:
+            try:
+                maxStateRepeat = int(splitLine[1])
+            except ValueError:
+                if "None" not in splitLine[1]:
+                    print("invalid type for maxStateRepeat. Defaulting to 'None'", flush=True)
+                maxStateRepeat = -1
+
+
         if "nthreads" in line:
             try:
                 nthreads = int(splitLine[1])
             except ValueError:
-                print("Invalid nthread size. Defaulting to 1.")
+                print("Invalid nthread size. Defaulting to 1.", flush=True)
                 nthreads = 1
         if "makePos" in line:
             makePos = "True" == splitLine[1]
@@ -541,7 +561,7 @@ def applyConfig(configPath=None):
             "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
         width = max(orders) + 3
     configer.close()
-    return printVar, orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle
+    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, nthreads, makePos, doShuffle
 
 
 def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=0):
@@ -575,9 +595,9 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
 
     numPoints = int(inputMatrix.shape[0] / numStates)
     numColumns = inputMatrix.shape[1]
-    print("Number of States:", numStates)
-    print("Number of Points:", numPoints)
-    print("Number of Features (w. E_h and r.c.):", numColumns)
+    print("Number of States:", numStates, flush=True)
+    print("Number of Points:", numPoints, flush=True)
+    print("Number of Features (w. E_h and r.c.):", numColumns, flush=True)
     sys.stdout.flush()
 
     curves = inputMatrix.reshape((numPoints, numStates, numColumns))
@@ -597,7 +617,7 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
     return Evals, Pvals, allPnts
 
 
-def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None):
+def main(infile, outfile, numStates, configPath=None):
     """
     @brief: This function takes a sequence of points for multiple states with energies and properties
     and reorders them such that the energies and properties are continuous
@@ -625,11 +645,23 @@ def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None
     Returns None
     """
 
-    printVar, orders, width, futurePnts, maxPan, stateBounds, pntBounds, nthreads, makePos, doShuffle = applyConfig(configPath)
+    # Parse the configuration file
+    printVar, orders, width, futurePnts, maxPan, \
+    stateBounds, maxStateRepeat, pntBounds, nthreads, \
+    makePos, doShuffle = \
+        applyConfig(configPath)
+
+    # set the number of threads
     numba.set_num_threads(1 if nthreads is None else nthreads)
+
+    # Parse the input file
     Evals, Pvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar)
     sortEnergies(Evals, Pvals)
-    arrangeStates(Evals, Pvals, allPnts, configPath, maxiter=200, repeatMax=1, numStateRepeat=50)
+
+    # Calculate the stencils and reorder the data
+    arrangeStates(Evals, Pvals, allPnts, configPath)
+
+    # Create the output file
     newCurvesList = []
     for pnt in range(allPnts.shape[0]):
         if printVar == 0:
@@ -643,8 +675,8 @@ def main(infile="input.csv", outfile="output.csv", numStates=10, configPath=None
 
 if __name__ == "__main__":
     try:
-        infile = sys.argv[1]
-        outfile = sys.argv[2]
+        in_file = sys.argv[1]
+        out_file = sys.argv[2]
     except (ValueError, IndexError):
         raise ValueError("First two arguments must be the path for the input file with the data and the output file")
 
@@ -654,8 +686,8 @@ if __name__ == "__main__":
         raise ValueError("Third argument must specify the number of states in the input data")
 
     if len(sys.argv) > 4:
-        configPath = sys.argv[4]
+        config_Path = sys.argv[4]
     else:
-        configPath = None
+        config_Path = None
 
-    main(infile, outfile, numStates, configPath)
+    main(in_file, out_file, numStates, config_Path)

@@ -629,11 +629,14 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
     if eBounds is not None:
         Evals = np.where(Evals < eBounds[0], np.nan, Evals)
         Evals = np.where(Evals > eBounds[1], np.nan, Evals)
-        mask = np.isnan(Evals)
-        Evals = np.ma.array(Evals, mask=mask)
+        emask = np.isnan(Evals)
+        Evals = np.ma.array(Evals, mask=emask)
 
+        pmask = np.zeros(Pvals.shape)
         for i in range(Pvals.shape[-1]):
-            Pvals[:,:,i] = np.ma.array(Pvals[:,:, i], mask=mask)
+            pmask[:, :, i] = emask
+        Pvals[np.where(pmask)] = np.nan
+        Pvals = np.ma.array(Pvals, mask=pmask)
     return Evals, Pvals, allPnts
 
 

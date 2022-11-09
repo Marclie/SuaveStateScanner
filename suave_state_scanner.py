@@ -627,7 +627,8 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
                          "in the input file (excluding the reaction coordinate).")
 
     if eBounds is not None:
-        Evals = np.where(Evals > eBounds, np.nan, Evals)
+        Evals = np.where(Evals < eBounds[0], np.nan, Evals)
+        Evals = np.where(Evals > eBounds[1], np.nan, Evals)
         mask = np.isnan(Evals)
         Evals = np.ma.array(Evals, mask=mask)
 

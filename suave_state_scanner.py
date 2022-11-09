@@ -23,8 +23,6 @@ from numba import njit, prange, set_num_threads
 from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
 
 from nstencil import makeStencil
-import matplotlib
-from matplotlib import pyplot as plt
 
 
 def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, maxPan):
@@ -118,13 +116,16 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, 
         raise "energies and/or features have incompatible dimensions"
 
     # compute combined finite differences from all stencils considered in panning window
-    return approxDeriv(F, diff, center, stencil, alphas, sN)
+    diffX = approxDeriv(F, diff, center, stencil, alphas, sN)
+    mask = np.isnan(diffX)
+    diffX = np.ma.array(diffX, mask=mask)
+    return diffX
 
 
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def approxDeriv(F, diff, center, stencil, alphas, sN):
     """
-    @brief This function approximates the n-th order derivatives of a the energies and properties 
+    @brief This function approximates the n-th order derivatives of a the energies and properties
            at a point for a given stencil size.
     @param F: the energies and properties of the state to be reordered and each state above it across each point
     @param diff: the finite differences of the energies and properties at the center point
@@ -132,7 +133,7 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
     @param stencil: the stencil to use in the finite difference approximation
     @param alphas: the coefficients of the stencil to use in the finite difference approximation
     @param sN: the size of the stencil to use in the finite difference approximation
-    
+
     @return: the n-th order finite differences of the energies and properties at the center point with the current stencil
     """
 
@@ -148,7 +149,6 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
 
 
 # enforce ordering metric
-@njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def getMetric(diffE, diffP):
     """
     @brief This function computes the ordering metric for a given set of finite differences.
@@ -194,7 +194,7 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
     numStates = Evals.shape[0]
     numPoints = Evals.shape[1]
 
-    # find smallest step size
+    # find the smallest step size
     minh = np.inf
     for idx in range(numPoints - 1):
         h = allPnts[idx + 1] - allPnts[idx]
@@ -210,7 +210,7 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
 
     # set parameters from configuration file
     printVar, orders, width, futurePnts, maxPan, \
-    stateBounds, maxStateRepeat, pntBounds, nthreads, \
+    stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, \
     makePos, doShuffle = \
         applyConfig(configPath)
 
@@ -243,8 +243,8 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
             # check if state has been modified too many times without improvement
             if stateRepeatList[state] >= maxStateRepeat > 0:
                 stateRepeatList[state] += 1
-                if stateRepeatList[state] < maxStateRepeat + 5:
-                    # if so, ignore it for 5 sweeps
+                if stateRepeatList[state] < maxStateRepeat + 10:
+                    # if so, ignore it for 10 sweeps
                     print("###", "Skipping", "###", flush=True)
                     continue
                 else:
@@ -464,12 +464,13 @@ def applyConfig(configPath=None):
     maxPan = None
     stateBounds = None
     pntBounds = None
+    eBounds = None
     nthreads = 1
     makePos = False
     doShuffle = False
     maxStateRepeat = -1
     if configPath is None:
-        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, nthreads, makePos, doShuffle
+        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, makePos, doShuffle
 
     configer = open(configPath, 'r')
     for line in configer.readlines():
@@ -537,6 +538,17 @@ def applyConfig(configPath=None):
                 if "None" not in splitLine[1]:
                     print("The stateBounds provided is invalid. Defaulting to 'None'", flush=True)
                 stateBounds = None
+        if "eBounds" in line:
+            try:
+                eBounds = stringToList(splitLine[1])
+                eBounds = [float(eBound) for eBound in eBounds]
+                if len(eBounds) == 0:
+                    print("The eBounds provided is invalid. Defaulting to 'None'", flush=True)
+                    eBounds = None
+            except ValueError:
+                if "None" not in splitLine[1]:
+                    print("The eBounds provided is invalid. Defaulting to 'None'", flush=True)
+                eBounds = None
         if "maxStateRepeat" in line:
             try:
                 maxStateRepeat = int(splitLine[1])
@@ -561,10 +573,10 @@ def applyConfig(configPath=None):
             "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
         width = max(orders) + 3
     configer.close()
-    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, nthreads, makePos, doShuffle
+    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, makePos, doShuffle
 
 
-def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=0):
+def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=0, eBounds=None):
     """
     This function extracts state information from a file
 
@@ -614,6 +626,13 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
         raise ValueError("Invalid printVar index. Must be less than the number of columns "
                          "in the input file (excluding the reaction coordinate).")
 
+    if eBounds is not None:
+        Evals = np.where(Evals > eBounds, np.nan, Evals)
+        mask = np.isnan(Evals)
+        Evals = np.ma.array(Evals, mask=mask)
+
+        for i in range(Pvals.shape[-1]):
+            Pvals[:,:,i] = np.ma.array(Pvals[:,:, i], mask=mask)
     return Evals, Pvals, allPnts
 
 
@@ -647,7 +666,7 @@ def main(infile, outfile, numStates, configPath=None):
 
     # Parse the configuration file
     printVar, orders, width, futurePnts, maxPan, \
-    stateBounds, maxStateRepeat, pntBounds, nthreads, \
+    stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, \
     makePos, doShuffle = \
         applyConfig(configPath)
 
@@ -655,7 +674,7 @@ def main(infile, outfile, numStates, configPath=None):
     numba.set_num_threads(1 if nthreads is None else nthreads)
 
     # Parse the input file
-    Evals, Pvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar)
+    Evals, Pvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar, eBounds)
     sortEnergies(Evals, Pvals)
 
     # Calculate the stencils and reorder the data

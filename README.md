@@ -61,6 +61,10 @@ Input File Format
 The file is assumed to contain a sequence of points for multiple states with energies and properties. The file will be
 filled with rows corresponding to the reaction coordinate and then by state, with the energy and properties of each state
 printed along the columns. The first column must be the reaction coordinate. The second column must be the state's energy or some other target variable.
+The remaining columns are the properties of the state. 
+
+The number of states is specified by the user.
+
 
     rc1 energy1 property1.1 property1.2 --->
     rc1 energy2 property2.1 property2.2 --->
@@ -68,6 +72,10 @@ printed along the columns. The first column must be the reaction coordinate. The
                     V
     rc2 energy1 property1.1 property1.2 --->
     rc2 energy2 property2.1 property2.2 --->
+
+For data that is not perfectly square, the script will break. If it is not feasible to run further calculations,
+the user can replace missing data with Nans. The script will ignore these points for calculating finite differences.
+However, the user should be aware that the script will not effectively reorder states if there are too many missing.
 
 Configuration File Format
 -------------------------
@@ -81,8 +89,9 @@ width = 5
 futurePnts = 0
 maxPan = None
 stateBounds = None
-maxStateRepeat = None
 pntBounds = None
+eBounds = None
+maxStateRepeat = None
 nthreads = 7
 makePos = True
 doShuffle = False
@@ -123,6 +132,10 @@ All configurations in the configuration file are optional and are defined as fol
   upper bounds on indices identifying individual electronic states within an ensemble (e.g., if numStates=3 then
   stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
   electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
+
+* `eBounds` - The bounds of the energies in the input file. If provided, this should be a list
+  in the form [emin, emax] specifying inclusive lower and upper bounds on energies. By default all available
+  energies will be included in analysis/output unless eBounds is specified otherwise. (default: None)
 
 
 * `maxStateRepeat` - The maximum number of times a state can be repeated without changes in reordering procedure. If this parameter is not provided, the default value 'None' will be used, meaning there is no limit to the number of times a state can be repeated. (default: None)

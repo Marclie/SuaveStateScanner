@@ -39,7 +39,7 @@ def numbaFactorial(n):
     return LOOKUP_TABLE[n]
 
 
-@njit(parallel=True, cache=True)
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def makeStencil(N, s, d):
     S = np.zeros((N, N))
     for i in prange(N):

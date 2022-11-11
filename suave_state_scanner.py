@@ -16,6 +16,7 @@
 
 import copy as cp
 import sys
+import time
 
 import numba
 import numpy as np
@@ -86,7 +87,7 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, 
             sh.flags.writeable = False
 
             # get finite difference coefficients from stencil points
-            alpha = makeStencil(sN, sh, order)
+            alpha = makeStencil(sh, order)
 
             # collect finite difference coefficients from this stencil
             h_n = minh ** order
@@ -207,6 +208,7 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
 
     # containers to count unmodified states
     stateRepeatList = np.zeros(numStates)
+    hasNan = Evals.mask.any()
 
     # set parameters from configuration file
     printVar, orders, width, futurePnts, maxPan, \
@@ -221,11 +223,17 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
     print("futurePnts", futurePnts, flush=True)
     print("maxPan", maxPan, flush=True)
     print("stateBounds", stateBounds, flush=True)
+    print("eBounds", eBounds, flush=True)
     print("maxStateRepeat", maxStateRepeat, flush=True)
     print("pntBounds", pntBounds, flush=True)
     print("nthreads", nthreads, flush=True)
     print("makePos", makePos, flush=True)
     print("doShuffle", doShuffle, flush=True)
+    if hasNan:
+        print("\nNaN values detected in data. Will not enforce energy bounds.", flush=True)
+    print("\n\n", flush=True)
+    time.sleep(1)
+
 
     if pntBounds is None:
         pntBounds = [1, numPoints]
@@ -235,6 +243,7 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
     # arrange states such that energy and amplitude norms are continuous
     numSweeps = numPoints ** 2
     for sweep in range(numSweeps):
+        startSweeptime = time.time()
         for state in range(numStates):
             stateEvals = cp.deepcopy(Evals)
             statePvals = cp.deepcopy(Pvals)
@@ -263,13 +272,22 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                 itr = 0
                 lastDif = (inf, state)
 
+                # set bounds for states to be reordered
+                lobound = state
+                upbound = numStates - 1
+                if stateBounds is not None:
+                    lobound = stateBounds[0]
+                    upbound = stateBounds[1]
+                elif hasNan:
+                    lobound = 0
+
                 # selection Sort algorithm to rearrange states
                 while repeat <= repeatMax and itr < maxiter:
 
                     # nth order finite difference
-                    diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width, futurePnts,
+                    diffE = generateDerivatives(numPoints, pnt, Evals[lobound:upbound], allPnts, minh, orders, width, futurePnts,
                                                 maxPan)
-                    diffP = generateDerivatives(numPoints, pnt, Pvals[state:], allPnts, minh, orders, width, futurePnts,
+                    diffP = generateDerivatives(numPoints, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width, futurePnts,
                                                 maxPan)
 
                     if diffE.size == 0 or diffP.size == 0:
@@ -285,10 +303,10 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                         Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
 
                         # nth order finite difference
-                        diffE = generateDerivatives(numPoints, pnt, Evals[state:], allPnts, minh, orders, width,
+                        diffE = generateDerivatives(numPoints, pnt, Evals[lobound:upbound], allPnts, minh, orders, width,
                                                     futurePnts,
                                                     maxPan)
-                        diffP = generateDerivatives(numPoints, pnt, Pvals[state:], allPnts, minh, orders, width,
+                        diffP = generateDerivatives(numPoints, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width,
                                                     futurePnts,
                                                     maxPan)
 
@@ -328,12 +346,14 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                 stateRepeatList[state] += 1
             else:
                 stateRepeatList[state] = 0
+        endSweeptime = time.time()
 
         delEval = Evals - lastEvals
         delNval = Pvals - lastPvals
 
         delMax = delEval.max() + delNval.max()
         print("CONVERGENCE PROGRESS: {:e}".format(delMax), flush=True)
+        print("SWEEP TIME: {:e}".format(endSweeptime - startSweeptime), flush=True)
         if delMax < 1e-12:
             print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
             break
@@ -601,8 +621,8 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
     The function returns the energies, properties, and points
     """
 
-    if stateBounds is None:
-        stateBounds = [0, numStates]
+    # if stateBounds is None:
+    #     stateBounds = [0, numStates]
     inputMatrix = genfromtxt(infile)
 
     numPoints = int(inputMatrix.shape[0] / numStates)
@@ -618,26 +638,40 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
         shuffle_energy(curves)
 
     allPnts = curves[0, :, 0]
-    Evals = curves[stateBounds[0]:stateBounds[1], :, 1]
-    Pvals = curves[stateBounds[0]:stateBounds[1], :, 2:]
+    Evals = curves[:, :, 1]
+    Pvals = curves[:, :, 2:]
+
     if makePos:
         Pvals = abs(Pvals)
     if printVar > numColumns - 1:
         raise ValueError("Invalid printVar index. Must be less than the number of columns "
                          "in the input file (excluding the reaction coordinate).")
 
+
+    Evals, Pvals = maskVals(Evals, Pvals)
     if eBounds is not None:
         Evals = np.where(Evals < eBounds[0], np.nan, Evals)
         Evals = np.where(Evals > eBounds[1], np.nan, Evals)
-        emask = np.isnan(Evals)
-        Evals = np.ma.array(Evals, mask=emask)
+        Evals, Pvals = maskVals(Evals, Pvals)
 
-        pmask = np.zeros(Pvals.shape)
-        for i in range(Pvals.shape[-1]):
-            pmask[:, :, i] = emask
-        Pvals[np.where(pmask)] = np.nan
-        Pvals = np.ma.array(Pvals, mask=pmask)
     return Evals, Pvals, allPnts
+
+
+def maskVals(Evals, Pvals):
+    """
+    This function masks the values of the energies and properties that are NaN
+    @param Evals: the energies
+    @param Pvals: the properties
+    @return: the masked energies and properties
+    """
+    emask = np.isnan(Evals)
+    Evals = np.ma.array(Evals, mask=emask)
+    pmask = np.zeros(Pvals.shape)
+    for i in range(Pvals.shape[-1]):
+        pmask[:, :, i] = emask
+    Pvals[np.where(pmask)] = np.nan
+    Pvals = np.ma.array(Pvals, mask=pmask)
+    return Evals, Pvals
 
 
 def main(infile, outfile, numStates, configPath=None):
@@ -668,6 +702,11 @@ def main(infile, outfile, numStates, configPath=None):
     Returns None
     """
 
+    print("\nInput File:", infile, flush=True)
+    print("Output File:", outfile, flush=True)
+    print()
+    sys.stdout.flush()
+
     # Parse the configuration file
     printVar, orders, width, futurePnts, maxPan, \
     stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, \
@@ -682,7 +721,10 @@ def main(infile, outfile, numStates, configPath=None):
     sortEnergies(Evals, Pvals)
 
     # Calculate the stencils and reorder the data
+    startArrange = time.time()
     arrangeStates(Evals, Pvals, allPnts, configPath)
+    endArrange = time.time()
+    print("\n\nTotal time to arrange states:", endArrange - startArrange, flush=True)
 
     # Create the output file
     newCurvesList = []
@@ -694,15 +736,19 @@ def main(infile, outfile, numStates, configPath=None):
     newCurves = stack(newCurvesList, axis=1)
     newCurves = insert(newCurves, 0, allPnts, axis=0)
     savetxt(outfile, newCurves, fmt='%20.12f')
+    print("Output file created:", outfile, flush=True)
 
 
 if __name__ == "__main__":
     try:
         in_file = sys.argv[1]
+    except (ValueError, IndexError):
+        raise ValueError("First argument must be the input file")
+
+    try:
         out_file = sys.argv[2]
     except (ValueError, IndexError):
-        raise ValueError("First two arguments must be the path for the input file with the data and the output file")
-
+        raise ValueError("Second argument must be the output file")
     try:
         numStates = int(sys.argv[3])
     except (ValueError, IndexError):
@@ -712,5 +758,6 @@ if __name__ == "__main__":
         config_Path = sys.argv[4]
     else:
         config_Path = None
+        print("No configuration file specified. Using default values.", flush=True)
 
     main(in_file, out_file, numStates, config_Path)

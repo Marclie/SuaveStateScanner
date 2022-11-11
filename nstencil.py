@@ -33,14 +33,24 @@ LOOKUP_TABLE = np.array([
 
 @njit(parallel=False, cache=True)
 def numbaFactorial(n):
-    # This function is a numba implementation of the factorial function.
+    '''
+    This function computes the factorial of a number using a lookup table.
+    @param n: The number to compute the factorial of.
+    '''
+
     if n > 20:
         raise ValueError
     return LOOKUP_TABLE[n]
 
-
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
-def makeStencil(N, s, d):
+def computeStencil(N, s, d):
+    '''
+    This function computes the coefficients of a finite difference from a set of stencil points.
+    @param N: The number of stencil points.
+    @param s: The stencil points.
+    @param d: The order of the derivative to approximate.
+    '''
+
     S = np.zeros((N, N))
     for i in prange(N):
         S[i][:] = s[:] ** i
@@ -52,15 +62,33 @@ def makeStencil(N, s, d):
     alpha = np.linalg.solve(S, delta)
     return alpha
 
+savedAlpha = {}
+def makeStencil(s, d):
+    '''
+    This function generates a finite difference stencil for a function with N points.
+    @param s: The stencil points.
+    @param d: The order of the derivative to approximate.
+    '''
 
-def mytest():
+    N = len(s)
+    hashID = hash((N, s.tostring(), d))
+    try:
+        alpha = savedAlpha[hashID]
+    except KeyError:
+        alpha = computeStencil(N, s, d)
+        savedAlpha[hashID] = alpha
+
+    return alpha
+
+
+def dummyTest():
     # This function tests the makeStencil function.
     for k in range(7):
         N = k + 1
         s = np.arange(N)
-        alpha = makeStencil(N, s, 2)
+        alpha = makeStencil(s, 2)
 
         print(s)
         print(alpha)
-        print()
+        print("\nreference: https://en.wikipedia.org/wiki/Finite_difference_coefficient")
 # mytest()

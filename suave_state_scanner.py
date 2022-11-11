@@ -266,6 +266,10 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                 print("@@@@@@@", "STATE", state, "@@@@@@@@@", flush=True)
                 print("###", "POINT", pnt, "###", flush=True)
 
+                # skip point if it corresponds to a NaN value
+                if hasNan and Evals.mask[state, pnt]:
+                    print("###", "Skipping NaN", "###", flush=True)
+
                 repeat = 0
                 repeatMax = 1
                 maxiter = 500
@@ -274,7 +278,7 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
 
                 # set bounds for states to be reordered
                 lobound = state # default is to only reorder states after the current state
-                upbound = numStates - 1
+                upbound = numStates
                 if stateBounds is not None:
                     # if bounds are specified, use them
                     lobound = stateBounds[0]

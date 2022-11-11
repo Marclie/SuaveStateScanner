@@ -230,7 +230,7 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
     print("makePos", makePos, flush=True)
     print("doShuffle", doShuffle, flush=True)
     if hasNan:
-        print("\nNaN values detected in data. Will not enforce energy bounds.", flush=True)
+        print("\nNaN/Inf values detected in data. Will not enforce state bounds.", flush=True)
     print("\n\n", flush=True)
     time.sleep(1)
 
@@ -269,6 +269,12 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                 # skip point if it corresponds to a NaN value
                 if hasNan and Evals.mask[state, pnt]:
                     print("###", "Skipping NaN", "###", flush=True)
+
+                if eBounds is not None:
+                    # skip point if it is outside the energy bounds
+                    if Evals[state, pnt] < eBounds[0] or Evals[state, pnt] > eBounds[1]:
+                        print("###", "Skipping: outside energy bounds", "###", flush=True)
+                        continue
 
                 repeat = 0
                 repeatMax = 1
@@ -655,11 +661,6 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
 
 
     Evals, Pvals = maskVals(Evals, Pvals)
-    if eBounds is not None:
-        Evals = np.where(Evals < eBounds[0], np.nan, Evals)
-        Evals = np.where(Evals > eBounds[1], np.nan, Evals)
-        Evals, Pvals = maskVals(Evals, Pvals)
-
     return Evals, Pvals, allPnts
 
 
@@ -670,13 +671,14 @@ def maskVals(Evals, Pvals):
     @param Pvals: the properties
     @return: the masked energies and properties
     """
-    emask = np.isnan(Evals)
-    Evals = np.ma.array(Evals, mask=emask)
+
+    Evals = np.ma.masked_invalid(Evals)
+    emask = Evals.mask
     pmask = np.zeros(Pvals.shape)
     for i in range(Pvals.shape[-1]):
         pmask[:, :, i] = emask
-    Pvals[np.where(pmask)] = np.nan
-    Pvals = np.ma.array(Pvals, mask=pmask)
+    Pvals[np.where(pmask)] = np.inf
+    Pvals = np.ma.masked_invalid(Pvals)
     return Evals, Pvals
 
 

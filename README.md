@@ -74,7 +74,7 @@ The number of states is specified by the user.
     rc2 energy2 property2.1 property2.2 --->
 
 For data that is not perfectly square, the script will break. If it is not feasible to run further calculations,
-the user can replace missing data with Nans. The script will ignore these points for calculating finite differences.
+the user can replace missing data with inf. The script will ignore these points for calculating finite differences.
 However, the user should be aware that the script will not effectively reorder states if there are too many missing.
 
 Configuration File Format

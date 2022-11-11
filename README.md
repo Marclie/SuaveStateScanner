@@ -129,9 +129,11 @@ All configurations in the configuration file are optional and are defined as fol
 
 * `stateBounds` - The bounds of the states in the input file. If provided, this should be a
   list in the form [statemin, statemax] specifying inclusive lower and
-  upper bounds on indices identifying individual electronic states within an ensemble (e.g., if numStates=3 then
-  stateBounds=[0, 1] would select only two out of three available electronic states). By default all available
+  upper bounds on indices identifying individual electronic states to sort (e.g., if numStates=3 then
+  stateBounds=[0, 1] would reorder only two out of three available electronic states). 
+  Electronic states from outside the range can swap with interior states to further improve continuity. By default all available
   electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
+
 
 * `eBounds` - The bounds of the energies in the input file. If provided, this should be a list
   in the form [emin, emax] specifying inclusive lower and upper bounds on energies. By default all available

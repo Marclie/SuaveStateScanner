@@ -273,12 +273,14 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                 lastDif = (inf, state)
 
                 # set bounds for states to be reordered
-                lobound = state
+                lobound = state # default is to only reorder states after the current state
                 upbound = numStates - 1
                 if stateBounds is not None:
+                    # if bounds are specified, use them
                     lobound = stateBounds[0]
                     upbound = stateBounds[1]
                 elif hasNan:
+                    # if there are NaN values, then the bounds are set to the entire range
                     lobound = 0
 
                 # selection Sort algorithm to rearrange states

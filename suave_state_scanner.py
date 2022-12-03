@@ -148,7 +148,7 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
     return np.absolute(diff.sum(axis=1))
 
 
-# enforce ordering metric
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def getMetric(diffE, diffP):
     """
     @brief This function computes the ordering metric for a given set of finite differences.
@@ -163,7 +163,7 @@ def getMetric(diffE, diffP):
 
     # metric uses the sum of the product of the properties and energies for each state
     # to enforce the product rule of differentiation for the change in the ordering metric
-    return (diffE * diffP).mean()
+    return (np.log(1 + diffE * diffP)).sum()
 
 
 def sortEnergies(Evals, Pvals):
@@ -206,7 +206,7 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
 
     # set parameters from configuration file
     printVar, orders, width, futurePnts, maxPan, \
-    stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, \
+    stateBounds, maxStateRepeat, pntBounds, eBounds, keepInterp, nthreads, \
     makePos, doShuffle = \
         applyConfig(configPath)
 
@@ -218,6 +218,7 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
     print("maxPan", maxPan, flush=True)
     print("stateBounds", stateBounds, flush=True)
     print("eBounds", eBounds, flush=True)
+    print("keepInterp", keepInterp, flush=True)
     print("maxStateRepeat", maxStateRepeat, flush=True)
     print("pntBounds", pntBounds, flush=True)
     print("nthreads", nthreads, flush=True)
@@ -258,6 +259,8 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
         # create copy of Evals and Pvals with interpolated missing values (if any)
         if hasMissing:
             interpMissing(Evals, Pvals, allPnts, numStates)
+            if keepInterp:
+                saveOrder(Evals, Pvals, allPnts, printVar)
 
         for state in range(numStates):
             # save initial state info
@@ -403,10 +406,20 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
         print("SWEEP TIME: {:e}".format(endSweeptime - startSweeptime), flush=True)
         if delMax < 1e-12:
             print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
+            if keepInterp:
+                if hasMissing:
+                    interpMissing(Evals, Pvals, allPnts, numStates)
             sortEnergies(Evals, Pvals)
             return Evals, Pvals
 
         sortEnergies(Evals, Pvals)
+
+    print("!!!!!!!!!!!!!!!!!!!! FAILED TO CONVERRGE !!!!!!!!!!!!!!!!!!!!", flush=True)
+    if keepInterp:
+        if hasMissing:
+            interpMissing(Evals, Pvals, allPnts, numStates)
+    sortEnergies(Evals, Pvals)
+    return Evals, Pvals
 
 def interpMissing(Evals, Pvals, allPnts, numStates):
     """Interpolate missing values in Evals and Pvals"""
@@ -550,12 +563,13 @@ def applyConfig(configPath=None):
     stateBounds = None
     pntBounds = None
     eBounds = None
+    keepInterp = False
     nthreads = 1
     makePos = False
     doShuffle = False
     maxStateRepeat = -1
     if configPath is None:
-        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, makePos, doShuffle
+        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, eBounds, keepInterp, nthreads, makePos, doShuffle
 
     configer = open(configPath, 'r')
     for line in configer.readlines():
@@ -634,6 +648,11 @@ def applyConfig(configPath=None):
                 if "None" not in splitLine[1]:
                     print("The eBounds provided is invalid. Defaulting to 'None'", flush=True)
                 eBounds = None
+        if "keepInterp" in line:
+            if "True" in splitLine[1]:
+                keepInterp = True
+            else:
+                keepInterp = False
         if "maxStateRepeat" in line:
             try:
                 maxStateRepeat = int(splitLine[1])
@@ -658,7 +677,7 @@ def applyConfig(configPath=None):
             "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
         width = max(orders) + 3
     configer.close()
-    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, makePos, doShuffle
+    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, eBounds, keepInterp, nthreads, makePos, doShuffle
 
 
 def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=0, eBounds=None):
@@ -750,7 +769,7 @@ def main(infile, outfile, numStates, configPath=None):
 
     # Parse the configuration file
     printVar, orders, width, futurePnts, maxPan, \
-    stateBounds, maxStateRepeat, pntBounds, eBounds, nthreads, \
+    stateBounds, maxStateRepeat, pntBounds, eBounds, keepInterp, nthreads, \
     makePos, doShuffle = \
         applyConfig(configPath)
 
@@ -765,7 +784,6 @@ def main(infile, outfile, numStates, configPath=None):
     startArrange = time.time()
     Evals, Pvals = arrangeStates(Evals, Pvals, allPnts, configPath)
 
-    print("Evals", Evals, flush=True)
     endArrange = time.time()
     print("\n\nTotal time to arrange states:", endArrange - startArrange, flush=True)
 

@@ -93,6 +93,7 @@ maxPan = None
 stateBounds = None
 pntBounds = None
 eBounds = None
+keepInterp = False
 maxStateRepeat = None
 nthreads = 7
 makePos = True
@@ -141,6 +142,11 @@ All configurations in the configuration file are optional and are defined as fol
 * `eBounds` - The bounds of the energies in the input file. If provided, this should be a list
   in the form [emin, emax] specifying inclusive lower and upper bounds on energies. By default all available
   energies will be included in analysis/output unless eBounds is specified otherwise. (default: None)
+
+* `keepInterp` - The 'keepInterp' parameter defines whether to keep the interpolated missing points in the output file. 
+   This parameter is optional and must be a boolean. If this parameter is not provided, 
+   the default value 'False' will be used. Note: if this parameter is set to True, the missing points will not be identified
+   in the output file. (default: False)
 
 
 * `maxStateRepeat` - The maximum number of times a state can be repeated without changes in reordering procedure. If this parameter is not provided, the default value 'None' will be used, meaning there is no limit to the number of times a state can be repeated. (default: None)

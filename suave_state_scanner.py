@@ -14,7 +14,7 @@
    limitations under the License.
 """
 
-import copy as cp
+import copy
 import sys
 import time
 
@@ -22,6 +22,7 @@ import numba
 import numpy as np
 from numba import njit, prange, set_num_threads
 from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
+import scipy.interpolate as interpolate
 
 from nstencil import makeStencil
 
@@ -118,8 +119,6 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, 
 
     # compute combined finite differences from all stencils considered in panning window
     diffX = approxDeriv(F, diff, center, stencil, alphas, sN)
-    mask = np.isnan(diffX)
-    diffX = np.ma.array(diffX, mask=mask)
     return diffX
 
 
@@ -162,9 +161,9 @@ def getMetric(diffE, diffP):
     # sum finite differences of all properties for each state
     diffP = np.sum(diffP, axis=1)
 
-    # metric uses the sum of the product of the properties and energies for each state 
+    # metric uses the sum of the product of the properties and energies for each state
     # to enforce the product rule of differentiation for the change in the ordering metric
-    return (diffE * diffP).sum()
+    return (diffE * diffP).mean()
 
 
 def sortEnergies(Evals, Pvals):
@@ -202,13 +201,8 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
         if h < minh:
             minh = h
 
-    # copy initial curve info
-    lastEvals = cp.deepcopy(Evals)
-    lastPvals = cp.deepcopy(Pvals)
-
     # containers to count unmodified states
     stateRepeatList = np.zeros(numStates)
-    hasNan = Evals.mask.any()
 
     # set parameters from configuration file
     printVar, orders, width, futurePnts, maxPan, \
@@ -229,8 +223,14 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
     print("nthreads", nthreads, flush=True)
     print("makePos", makePos, flush=True)
     print("doShuffle", doShuffle, flush=True)
-    if hasNan:
-        print("\nNaN/Inf values detected in data. Will not enforce state bounds.", flush=True)
+
+    # check if any points are nan or inf
+    hasMissing = np.isnan(Evals).any() or np.isinf(Evals).any() or np.isnan(Pvals).any() or np.isinf(Pvals).any()
+    if hasMissing:
+        print("\nWARNING: Energies or properties contain nan or inf values.\n"
+              "These will be ignored by interpolating over them during the optimization.\n"
+              "Final results will not include these points.", flush=True)
+
     print("\n\n", flush=True)
     time.sleep(1)
 
@@ -244,10 +244,25 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
     numSweeps = numPoints ** 2
     for sweep in range(numSweeps):
         startSweeptime = time.time()
+
+        # copy initial state info
+        lastEvals = copy.deepcopy(Evals)
+        lastPvals = copy.deepcopy(Pvals)
+        saveOrder(Evals, Pvals, allPnts, printVar)
+
+        # create map of current state to last state for each point
+        stateMap = np.zeros((numStates, numPoints), dtype=np.int32)
+        for pnt in range(numPoints):
+            stateMap[:, pnt] = np.arange(numStates)
+
+        # create copy of Evals and Pvals with interpolated missing values (if any)
+        if hasMissing:
+            interpMissing(Evals, Pvals, allPnts, numStates)
+
         for state in range(numStates):
-            stateEvals = cp.deepcopy(Evals)
-            statePvals = cp.deepcopy(Pvals)
-            saveOrder(Evals, Pvals, allPnts, printVar)
+            # save initial state info
+            stateEvals = copy.deepcopy(Evals)
+            statePvals = copy.deepcopy(Pvals)
 
             # check if state has been modified too many times without improvement
             if stateRepeatList[state] >= maxStateRepeat > 0:
@@ -266,16 +281,6 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                 print("@@@@@@@", "STATE", state, "@@@@@@@@@", flush=True)
                 print("###", "POINT", pnt, "###", flush=True)
 
-                # skip point if it corresponds to a NaN value
-                if hasNan and Evals.mask[state, pnt]:
-                    print("###", "Skipping NaN", "###", flush=True)
-
-                if eBounds is not None:
-                    # skip point if it is outside the energy bounds
-                    if Evals[state, pnt] < eBounds[0] or Evals[state, pnt] > eBounds[1]:
-                        print("###", "Skipping: outside energy bounds", "###", flush=True)
-                        continue
-
                 repeat = 0
                 repeatMax = 1
                 maxiter = 500
@@ -289,9 +294,20 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                     # if bounds are specified, use them
                     lobound = stateBounds[0]
                     upbound = stateBounds[1]
-                elif hasNan:
-                    # if there are NaN values, then the bounds are set to the entire range
-                    lobound = 0
+
+                if eBounds is not None:
+                    # if energy bounds are specified, specify upper bound as the last state with energy below the upper energy bound
+                    for idx in range(state, numStates):
+                        if Evals[idx, pnt] > eBounds[1]:
+                            if upbound > idx > lobound:
+                                upbound = idx
+                            break
+                    # if energy bounds are specified, specify lower bound as the first state with energy above the lower energy bound
+                    for idx in range(state, -1, -1):
+                        if Evals[idx, pnt] < eBounds[0]:
+                            if lobound < idx < upbound:
+                                lobound = idx
+                            break
 
                 # selection Sort algorithm to rearrange states
                 while repeat <= repeatMax and itr < maxiter:
@@ -310,6 +326,8 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
 
                     # compare continuity differences from this state swapped with all other states
                     for i in range(state + 1, numStates):
+                        if i < lobound or i >= upbound:
+                            continue
                         # get energy and norm for each state at this point
                         Evals[[state, i], pnt] = Evals[[i, state], pnt]
                         Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
@@ -345,6 +363,10 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                         Evals[[state, newState], pnt] = Evals[[newState, state], pnt]
                         Pvals[[state, newState], pnt] = Pvals[[newState, state], pnt]
 
+                        # update stateMap
+                        stateMap[[state, newState], pnt] = stateMap[[newState, state], pnt]
+
+
                     lastDif = minDif
                     itr += 1
                 if itr >= maxiter:
@@ -360,18 +382,47 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                 stateRepeatList[state] = 0
         endSweeptime = time.time()
 
-        delEval = Evals - lastEvals
-        delNval = Pvals - lastPvals
+        # reset states to original order with missing values
+        Evals = copy.deepcopy(lastEvals)
+        Pvals = copy.deepcopy(lastPvals)
 
-        delMax = delEval.max() + delNval.max()
+        # use stateMap to reorder states
+        for pnt in range(numPoints):
+            Evals[:, pnt] = Evals[stateMap[:, pnt], pnt]
+            Pvals[:, pnt] = Pvals[stateMap[:, pnt], pnt]
+
+        # check if states have converged
+        delEval = Evals - lastEvals
+        delPval = Pvals - lastPvals
+
+        delEval = delEval[np.isfinite(delEval)]
+        delPval = delPval[np.isfinite(delPval)]
+
+        delMax = delEval.max() + delPval.max()
         print("CONVERGENCE PROGRESS: {:e}".format(delMax), flush=True)
         print("SWEEP TIME: {:e}".format(endSweeptime - startSweeptime), flush=True)
         if delMax < 1e-12:
             print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
-            break
-        lastEvals = cp.deepcopy(Evals)
-        lastPvals = cp.deepcopy(Pvals)
+            sortEnergies(Evals, Pvals)
+            return Evals, Pvals
+
         sortEnergies(Evals, Pvals)
+
+def interpMissing(Evals, Pvals, allPnts, numStates):
+    """Interpolate missing values in Evals and Pvals"""
+
+    # interpolate all missing values
+    for i in range(numStates):
+        for j in range(Pvals.shape[2]): # loop over properties
+            # get the indices of non-missing values
+            idx = np.isfinite(Pvals[i, :, j])
+            # interpolate the missing values over points
+            Pvals[i, :, j] = interpolate.interp1d(allPnts[idx], Pvals[i, idx, j], kind='cubic', fill_value='extrapolate')(allPnts)
+
+        # get the indices of non-missing values
+        idx = np.isfinite(Evals[i, :])
+        # interpolate the missing values over points
+        Evals[i, :] = interpolate.interp1d(allPnts[idx], Evals[i, idx], kind='cubic', fill_value='extrapolate')(allPnts)
 
 
 @njit(parallel=True, cache=True)
@@ -468,6 +519,8 @@ def saveOrder(Evals, Pvals, allPnts, printVar=0):
     for pnt in range(allPnts.shape[0]):
         if printVar == 0:
             newCurvesList.append(Evals[:, pnt])
+        elif printVar < 0:
+            newCurvesList.append(Pvals[:, pnt, printVar])
         else:
             newCurvesList.append(Pvals[:, pnt, printVar - 1])
 
@@ -659,27 +712,7 @@ def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=
         raise ValueError("Invalid printVar index. Must be less than the number of columns "
                          "in the input file (excluding the reaction coordinate).")
 
-
-    Evals, Pvals = maskVals(Evals, Pvals)
     return Evals, Pvals, allPnts
-
-
-def maskVals(Evals, Pvals):
-    """
-    This function masks the values of the energies and properties that are NaN
-    @param Evals: the energies
-    @param Pvals: the properties
-    @return: the masked energies and properties
-    """
-
-    Evals = np.ma.masked_invalid(Evals)
-    emask = Evals.mask
-    pmask = np.zeros(Pvals.shape)
-    for i in range(Pvals.shape[-1]):
-        pmask[:, :, i] = emask
-    Pvals[np.where(pmask)] = np.inf
-    Pvals = np.ma.masked_invalid(Pvals)
-    return Evals, Pvals
 
 
 def main(infile, outfile, numStates, configPath=None):
@@ -730,7 +763,9 @@ def main(infile, outfile, numStates, configPath=None):
 
     # Calculate the stencils and reorder the data
     startArrange = time.time()
-    arrangeStates(Evals, Pvals, allPnts, configPath)
+    Evals, Pvals = arrangeStates(Evals, Pvals, allPnts, configPath)
+
+    print("Evals", Evals, flush=True)
     endArrange = time.time()
     print("\n\nTotal time to arrange states:", endArrange - startArrange, flush=True)
 
@@ -739,6 +774,8 @@ def main(infile, outfile, numStates, configPath=None):
     for pnt in range(allPnts.shape[0]):
         if printVar == 0:
             newCurvesList.append(Evals[:, pnt])
+        elif printVar < 0:
+            newCurvesList.append(Pvals[:, pnt, printVar])
         else:
             newCurvesList.append(Pvals[:, pnt, printVar - 1])
     newCurves = stack(newCurvesList, axis=1)

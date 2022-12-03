@@ -74,8 +74,10 @@ The number of states is specified by the user.
     rc2 energy2 property2.1 property2.2 --->
 
 For data that is not perfectly square, the script will break. If it is not feasible to run further calculations,
-the user can replace missing data with inf. The script will ignore these points for calculating finite differences.
-However, the user should be aware that the script will not effectively reorder states if there are too many missing.
+the user can replace missing energies and/or properties with nan or inf. The script will ignore these points for 
+calculating finite differences by interpolating over them (A warning message will indicate this). The final output will 
+keep the nan or inf values and will not interpolate over them. However, the user should be aware that the script will 
+not effectively reorder states if there are too many missing.
 
 Configuration File Format
 -------------------------
@@ -99,8 +101,9 @@ doShuffle = False
 
 All configurations in the configuration file are optional and are defined as follows:
 
-* `printVar` - The index for the target variable to be printed to the output file. If this is not specified, the
-  default is to print the energy of the state. Other values will print a specific property for each state (default: 0) 
+* `printVar` - The index for the target property to be printed to the output file. If this is not specified, the
+  default is to print the energy of the state. Other values will print a specific property for each state. Negative
+  values will index from the end of the list of properties. (default: 0)
 
 
 * `orders` - The 'orders' parameter defines the orders of derivatives desired for computation. This parameter must be a list of integers.

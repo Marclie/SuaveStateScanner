@@ -27,7 +27,7 @@ import scipy.interpolate as interpolate
 from nstencil import makeStencil
 
 
-def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, maxPan):
+def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, maxPan, backwards=False):
     """
     @brief This function approximates the n-th order derivatives of a the energies and properties at a point.
     @param N: the number of points in the state
@@ -68,6 +68,8 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, 
                 idx = (i + off)
                 if idx > futurePnts:
                     break
+                if backwards:
+                    idx = -idx
                 if 0 <= center + idx < N:
                     s.append(idx)
             sN = len(s)
@@ -179,15 +181,15 @@ def sortEnergies(Evals, Pvals):
     Pvals[:] = Pvals[idx]
 
 
-def arrangeStates(Evals, Pvals, allPnts, configPath=None):
+def arrangeStates(Evals, Pvals, allPnts, configVars):
     """
     @brief: This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
     @param Evals: The energies for each state at each point
     @param Pvals: The properties for each state at each point
     @param allPnts: The sequence of points
-    @param configPath: The path to the configuration file
+    @param configVars: The configuration variables for the algorithm
     
-    @return: The reordered energies, properties and points    
+    @return: The reordered energies and properties for each state at each point
     """
 
     # get dimensions of data
@@ -206,21 +208,21 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
 
     # set parameters from configuration file
     printVar, orders, width, futurePnts, maxPan, \
-    stateBounds, maxStateRepeat, pntBounds, eBounds, keepInterp, nthreads, \
-    makePos, doShuffle = \
-        applyConfig(configPath)
+    stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, \
+    makePos, doShuffle = configVars
 
     print("\n\n\tConfiguration Parameters:\n", flush=True)
     print("printVar", printVar, flush=True)
     print("orders", orders, flush=True)
     print("width", width, flush=True)
-    print("futurePnts", futurePnts, flush=True)
     print("maxPan", maxPan, flush=True)
+    print("futurePnts", futurePnts, flush=True)
+    print("pntBounds", pntBounds, flush=True)
+    print("sweepBack", sweepBack, flush=True)
     print("stateBounds", stateBounds, flush=True)
+    print("maxStateRepeat", maxStateRepeat, flush=True)
     print("eBounds", eBounds, flush=True)
     print("keepInterp", keepInterp, flush=True)
-    print("maxStateRepeat", maxStateRepeat, flush=True)
-    print("pntBounds", pntBounds, flush=True)
     print("nthreads", nthreads, flush=True)
     print("makePos", makePos, flush=True)
     print("doShuffle", doShuffle, flush=True)
@@ -234,12 +236,6 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
 
     print("\n\n", flush=True)
     time.sleep(1)
-
-
-    if pntBounds is None:
-        pntBounds = [1, numPoints]
-    if pntBounds[0] == 0 and futurePnts <= 0:
-        pntBounds[0] = 1
 
     # arrange states such that energy and amplitude norms are continuous
     numSweeps = numPoints ** 2
@@ -278,107 +274,15 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
                     # if state has been ignored for too long, test it again
                     stateRepeatList[state] = 0
 
-            for pnt in range(pntBounds[0], pntBounds[1]):
-                sys.stdout.flush()
-                print("\n%%%%%%%%%%", "SWEEP ", sweep, "%%%%%%%%%%", flush=True)
-                print("@@@@@@@", "STATE", state, "@@@@@@@@@", flush=True)
-                print("###", "POINT", pnt, "###", flush=True)
+            # reorder states across points for current state moving forwards
+            sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, numStates, configVars)
 
-                repeat = 0
-                repeatMax = 1
-                maxiter = 500
-                itr = 0
-                lastDif = (inf, state)
+            if sweepBack:
+                # reorder states across points for current state moving backwards
+                sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, numStates, configVars, backwards=True)
 
-                # set bounds for states to be reordered
-                lobound = state # default is to only reorder states after the current state
-                upbound = numStates
-                if stateBounds is not None:
-                    # if bounds are specified, use them
-                    lobound = stateBounds[0]
-                    upbound = stateBounds[1]
-
-                if eBounds is not None:
-                    # if energy bounds are specified, specify upper bound as the last state with energy below the upper energy bound
-                    for idx in range(state, numStates):
-                        if Evals[idx, pnt] > eBounds[1]:
-                            if upbound > idx > lobound:
-                                upbound = idx
-                            break
-                    # if energy bounds are specified, specify lower bound as the first state with energy above the lower energy bound
-                    for idx in range(state, -1, -1):
-                        if Evals[idx, pnt] < eBounds[0]:
-                            if lobound < idx < upbound:
-                                lobound = idx
-                            break
-
-                # selection Sort algorithm to rearrange states
-                while repeat <= repeatMax and itr < maxiter:
-
-                    # nth order finite difference
-                    diffE = generateDerivatives(numPoints, pnt, Evals[lobound:upbound], allPnts, minh, orders, width, futurePnts,
-                                                maxPan)
-                    diffP = generateDerivatives(numPoints, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width, futurePnts,
-                                                maxPan)
-
-                    if diffE.size == 0 or diffP.size == 0:
-                        continue
-
-                    diff = getMetric(diffE, diffP)
-                    minDif = (diff, state)
-
-                    # compare continuity differences from this state swapped with all other states
-                    for i in range(state + 1, numStates):
-                        if i < lobound or i >= upbound:
-                            continue
-                        # get energy and norm for each state at this point
-                        Evals[[state, i], pnt] = Evals[[i, state], pnt]
-                        Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
-
-                        # nth order finite difference
-                        diffE = generateDerivatives(numPoints, pnt, Evals[lobound:upbound], allPnts, minh, orders, width,
-                                                    futurePnts,
-                                                    maxPan)
-                        diffP = generateDerivatives(numPoints, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width,
-                                                    futurePnts,
-                                                    maxPan)
-
-                        if diffE.size == 0 or diffP.size == 0:
-                            continue
-
-                        diff = getMetric(diffE, diffP)
-
-                        if diff < minDif[0]:
-                            minDif = (diff, i)
-
-                        Evals[[state, i], pnt] = Evals[[i, state], pnt]
-                        Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
-
-                    if lastDif[1] == minDif[1]:
-                        repeat += 1
-                    else:
-                        repeat = 0
-                        print(state, "<---", minDif[1], flush=True)
-
-                    # swap state in point with new state that has the most continuous change in amplitude norms
-                    newState = minDif[1]
-                    if state != newState:
-                        Evals[[state, newState], pnt] = Evals[[newState, state], pnt]
-                        Pvals[[state, newState], pnt] = Pvals[[newState, state], pnt]
-
-                        # update stateMap
-                        stateMap[[state, newState], pnt] = stateMap[[newState, state], pnt]
-
-
-                    lastDif = minDif
-                    itr += 1
-                if itr >= maxiter:
-                    print("WARNING: state could not converge. Increase maxiter or repeatMax", flush=True)
-                else:
-                    print(lastDif, flush=True)
-                sys.stdout.flush()
+            # check if state has been modified
             delMax = stateDifference(Evals, Pvals, stateEvals, statePvals, state)
-
             if delMax < 1e-12:
                 stateRepeatList[state] += 1
             else:
@@ -420,6 +324,152 @@ def arrangeStates(Evals, Pvals, allPnts, configPath=None):
             interpMissing(Evals, Pvals, allPnts, numStates)
     sortEnergies(Evals, Pvals)
     return Evals, Pvals
+
+
+def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, numStates, configVars, backwards=False):
+    """
+    Sweep through points and sort states based on continuity of energy and amplitude norms
+    :param Evals: array of energies
+    :param Pvals: array of amplitude norms
+    :param stateMap: map of current state to last state for each point
+    :param allPnts: list of all points
+    :param minh: minimum energy difference
+    :param state: current state
+    :param sweep: current sweep
+    :param numPoints: number of points
+    :param numStates: number of states
+    :param configVars: list of configuration variables
+    :param backwards: if True, sweep backwards
+    """
+
+    # set parameters from configuration file
+    printVar, orders, width, futurePnts, maxPan, \
+    stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, \
+    makePos, doShuffle = configVars
+
+    if pntBounds is None:
+        pntBounds = [0, numPoints]
+
+    # ensure that pntBounds include enough points to make a valid finite difference
+    maxorder = max(orders)
+    if not backwards and pntBounds[0] < maxorder:
+        pntBounds[0] += maxorder
+    elif backwards and pntBounds[1] > numPoints - maxorder:
+        pntBounds[1] -= maxorder
+
+    # reorder states across points for current state moving forwards or backwards in 'time'
+    lowpoint = pntBounds[0]
+    highpoint = pntBounds[1]
+    deltapnt = 1
+    if backwards:
+        lowpoint = pntBounds[1] - 1
+        highpoint = pntBounds[0] + 1
+        deltapnt = -1
+
+    for pnt in range(lowpoint, highpoint, deltapnt):
+        sys.stdout.flush()
+        direction = "FORWARDS"
+        if backwards:
+            direction = "BACKWARDS"
+        print("\n%%%%%%%%%%", "SWEEP " + direction + ":", sweep, "%%%%%%%%%%", flush=True)
+        print("@@@@@@@", "STATE", state, "@@@@@@@@@", flush=True)
+        print("###", "POINT", pnt, "###", flush=True)
+
+        repeat = 0
+        repeatMax = 1
+        maxiter = 500
+        itr = 0
+        lastDif = (inf, state)
+
+        # set bounds for states to be reordered
+        lobound = state  # default is to only reorder states after the current state
+        upbound = numStates
+        if stateBounds is not None:
+            # if bounds are specified, use them
+            lobound = stateBounds[0]
+            upbound = stateBounds[1]
+
+        if eBounds is not None:
+            # if energy bounds are specified, specify upper bound as the last state with energy below the upper energy bound
+            for idx in range(state, numStates):
+                if Evals[idx, pnt] > eBounds[1]:
+                    if upbound > idx > lobound:
+                        upbound = idx
+                    break
+            # if energy bounds are specified, specify lower bound as the first state with energy above the lower energy bound
+            for idx in range(state, -1, -1):
+                if Evals[idx, pnt] < eBounds[0]:
+                    if lobound < idx < upbound:
+                        lobound = idx
+                    break
+
+        # selection Sort algorithm to rearrange states
+        while repeat <= repeatMax and itr < maxiter:
+
+            # nth order finite difference
+            diffE = generateDerivatives(numPoints, pnt, Evals[lobound:upbound], allPnts, minh, orders, width,
+                                        futurePnts,
+                                        maxPan, backwards=backwards)
+            diffP = generateDerivatives(numPoints, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width,
+                                        futurePnts,
+                                        maxPan, backwards=backwards)
+
+            if diffE.size == 0 or diffP.size == 0:
+                continue
+
+            diff = getMetric(diffE, diffP)
+            minDif = (diff, state)
+
+            # compare continuity differences from this state swapped with all other states
+            for i in range(state + 1, numStates):
+                if i < lobound or i >= upbound:
+                    continue
+                # get energy and norm for each state at this point
+                Evals[[state, i], pnt] = Evals[[i, state], pnt]
+                Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
+
+                # nth order finite difference
+                diffE = generateDerivatives(numPoints, pnt, Evals[lobound:upbound], allPnts, minh, orders, width,
+                                            futurePnts,
+                                            maxPan, backwards=backwards)
+                diffP = generateDerivatives(numPoints, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width,
+                                            futurePnts,
+                                            maxPan, backwards=backwards)
+
+                if diffE.size == 0 or diffP.size == 0:
+                    continue
+
+                diff = getMetric(diffE, diffP)
+
+                if diff < minDif[0]:
+                    minDif = (diff, i)
+
+                Evals[[state, i], pnt] = Evals[[i, state], pnt]
+                Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
+
+            if lastDif[1] == minDif[1]:
+                repeat += 1
+            else:
+                repeat = 0
+                print(state, "<---", minDif[1], flush=True)
+
+            # swap state in point with new state that has the most continuous change in amplitude norms
+            newState = minDif[1]
+            if state != newState:
+                Evals[[state, newState], pnt] = Evals[[newState, state], pnt]
+                Pvals[[state, newState], pnt] = Pvals[[newState, state], pnt]
+
+                # update stateMap
+                stateMap[[state, newState], pnt] = stateMap[[newState, state], pnt]
+
+            lastDif = minDif
+            itr += 1
+        if itr >= maxiter:
+            print("WARNING: state could not converge. Increase maxiter or repeatMax", flush=True)
+        else:
+            print(lastDif, flush=True)
+        sys.stdout.flush()
+
 
 def interpMissing(Evals, Pvals, allPnts, numStates):
     """Interpolate missing values in Evals and Pvals"""
@@ -562,6 +612,7 @@ def applyConfig(configPath=None):
     maxPan = None
     stateBounds = None
     pntBounds = None
+    sweepBack = True
     eBounds = None
     keepInterp = False
     nthreads = 1
@@ -569,7 +620,7 @@ def applyConfig(configPath=None):
     doShuffle = False
     maxStateRepeat = -1
     if configPath is None:
-        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, eBounds, keepInterp, nthreads, makePos, doShuffle
+        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, makePos, doShuffle
 
     configer = open(configPath, 'r')
     for line in configer.readlines():
@@ -605,14 +656,14 @@ def applyConfig(configPath=None):
             try:
                 futurePnts = int(splitLine[1])
             except ValueError:
-                if "None" not in splitLine[1]:
+                if "None" not in splitLine[1] and "none" not in splitLine[1]:
                     print("invalid type for futurePnts. Defaulting to '0'", flush=True)
                 futurePnts = 0
         if "maxPan" in line:
             try:
                 maxPan = int(splitLine[1])
             except ValueError:
-                if "None" not in splitLine[1]:
+                if "None" not in splitLine[1] and "none" not in splitLine[1]:
                     print("invalid type for maxPan. Defaulting to 'None'", flush=True)
                 maxPan = None
         if "pntBounds" in line:
@@ -623,9 +674,14 @@ def applyConfig(configPath=None):
                     print("The pntBounds provided is invalid. Defaulting to 'None'", flush=True)
                     pntBounds = None
             except ValueError:
-                if "None" not in splitLine[1]:
+                if "None" not in splitLine[1] and "none" not in splitLine[1]:
                     print("The pntBounds provided is invalid. Defaulting to 'None'", flush=True)
                 pntBounds = None
+        if "sweepBack" in line:
+            if "False" in splitLine[1] or "false" in splitLine[1]:
+                sweepBack = False
+            else:
+                sweepBack = True
         if "stateBounds" in line:
             try:
                 stateBounds = stringToList(splitLine[1])
@@ -634,7 +690,7 @@ def applyConfig(configPath=None):
                     print("The stateBounds provided is invalid. Defaulting to 'None'", flush=True)
                     stateBounds = None
             except ValueError:
-                if "None" not in splitLine[1]:
+                if "None" not in splitLine[1] and "none" not in splitLine[1]:
                     print("The stateBounds provided is invalid. Defaulting to 'None'", flush=True)
                 stateBounds = None
         if "eBounds" in line:
@@ -645,11 +701,11 @@ def applyConfig(configPath=None):
                     print("The eBounds provided is invalid. Defaulting to 'None'", flush=True)
                     eBounds = None
             except ValueError:
-                if "None" not in splitLine[1]:
+                if "None" not in splitLine[1] and "none" not in splitLine[1]:
                     print("The eBounds provided is invalid. Defaulting to 'None'", flush=True)
                 eBounds = None
         if "keepInterp" in line:
-            if "True" in splitLine[1]:
+            if "True" in splitLine[1] or "true" in splitLine[1]:
                 keepInterp = True
             else:
                 keepInterp = False
@@ -657,11 +713,9 @@ def applyConfig(configPath=None):
             try:
                 maxStateRepeat = int(splitLine[1])
             except ValueError:
-                if "None" not in splitLine[1]:
+                if "None" not in splitLine[1] and "none" not in splitLine[1]:
                     print("invalid type for maxStateRepeat. Defaulting to 'None'", flush=True)
                 maxStateRepeat = -1
-
-
         if "nthreads" in line:
             try:
                 nthreads = int(splitLine[1])
@@ -669,15 +723,22 @@ def applyConfig(configPath=None):
                 print("Invalid nthread size. Defaulting to 1.", flush=True)
                 nthreads = 1
         if "makePos" in line:
-            makePos = "True" == splitLine[1]
+            if "True" in splitLine[1] or "true" in splitLine[1]:
+                makePos = True
+            else:
+                makePos = False
         if "doShuffle" in line:
-            doShuffle = "True" == splitLine[1]
+            if "True" in splitLine[1] or "true" in splitLine[1]:
+                doShuffle = True
+            else:
+                doShuffle = False
     if width <= 0 or width <= max(orders):
         print(
             "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
         width = max(orders) + 3
     configer.close()
-    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, eBounds, keepInterp, nthreads, makePos, doShuffle
+    
+    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, makePos, doShuffle
 
 
 def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=0, eBounds=None):
@@ -768,10 +829,12 @@ def main(infile, outfile, numStates, configPath=None):
     sys.stdout.flush()
 
     # Parse the configuration file
+    configVars = applyConfig(configPath)
+
     printVar, orders, width, futurePnts, maxPan, \
-    stateBounds, maxStateRepeat, pntBounds, eBounds, keepInterp, nthreads, \
-    makePos, doShuffle = \
-        applyConfig(configPath)
+    stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, \
+    makePos, doShuffle = configVars
+
 
     # set the number of threads
     numba.set_num_threads(1 if nthreads is None else nthreads)
@@ -782,7 +845,7 @@ def main(infile, outfile, numStates, configPath=None):
 
     # Calculate the stencils and reorder the data
     startArrange = time.time()
-    Evals, Pvals = arrangeStates(Evals, Pvals, allPnts, configPath)
+    Evals, Pvals = arrangeStates(Evals, Pvals, allPnts, configVars)
 
     endArrange = time.time()
     print("\n\nTotal time to arrange states:", endArrange - startArrange, flush=True)
@@ -813,7 +876,7 @@ if __name__ == "__main__":
     except (ValueError, IndexError):
         raise ValueError("Second argument must be the output file")
     try:
-        numStates = int(sys.argv[3])
+        num_states = int(sys.argv[3])
     except (ValueError, IndexError):
         raise ValueError("Third argument must specify the number of states in the input data")
 
@@ -823,4 +886,4 @@ if __name__ == "__main__":
         config_Path = None
         print("No configuration file specified. Using default values.", flush=True)
 
-    main(in_file, out_file, numStates, config_Path)
+    main(in_file, out_file, num_states, config_Path)

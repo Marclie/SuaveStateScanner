@@ -92,6 +92,7 @@ futurePnts = 0
 maxPan = None
 stateBounds = None
 pntBounds = None
+sweepBack = True
 eBounds = None
 keepInterp = False
 maxStateRepeat = None
@@ -129,6 +130,12 @@ All configurations in the configuration file are optional and are defined as fol
 
 * `pntBounds` - The bounds of the points in the input file. If provided, this should be a list
   in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
+
+
+* `sweepBack` - The 'sweepBack' parameter defines whether the script will sweep backwards through the points
+   after it has finished sweeping forwards. This parameter is optional and must be a boolean. If this parameter is not provided, 
+   the default value 'True' will be used. It is recommended to keep this parameter as 'True' since the script loses 
+   accuracy at the boundaries due to the finite difference stencil. (default: True)
 
 
 * `stateBounds` - The bounds of the states in the input file. If provided, this should be a

@@ -358,7 +358,7 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
     if backwards:
         start = pntBounds[1] - 1
         end = pntBounds[0] - 1
-        deltapnt = -1
+        delta = -1
 
     # ensure that bounds include enough points to make a valid finite difference
     maxorder = max(orders)

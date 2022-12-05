@@ -350,21 +350,24 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
     if pntBounds is None:
         pntBounds = [0, numPoints]
 
-    # ensure that pntBounds include enough points to make a valid finite difference
-    maxorder = max(orders)
-    if not backwards and pntBounds[0] < maxorder:
-        pntBounds[0] += maxorder
-    elif backwards and pntBounds[1] > numPoints - maxorder:
-        pntBounds[1] -= maxorder
-
     # reorder states across points for current state moving forwards or backwards in 'time'
     lowpoint = pntBounds[0]
     highpoint = pntBounds[1]
     deltapnt = 1
+
     if backwards:
         lowpoint = pntBounds[1] - 1
         highpoint = pntBounds[0] + 1
         deltapnt = -1
+
+    # ensure that bounds include enough points to make a valid finite difference
+    maxorder = max(orders)
+    if not backwards and pntBounds[0] < maxorder:
+        lowpoint += maxorder
+    elif backwards and pntBounds[1] > numPoints - maxorder:
+        highpoint -= maxorder
+
+
 
     for pnt in range(lowpoint, highpoint, deltapnt):
         sys.stdout.flush()

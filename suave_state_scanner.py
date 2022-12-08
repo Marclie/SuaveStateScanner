@@ -259,9 +259,15 @@ def arrangeStates(Evals, Pvals, allPnts, configVars):
                 saveOrder(Evals, Pvals, allPnts, printVar)
 
         for state in range(numStates):
+            # skip state if out of bounds
+            if not (stateBounds[0] <= state <= stateBounds[1]):
+                continue
+
             # save initial state info
             stateEvals = copy.deepcopy(Evals)
             statePvals = copy.deepcopy(Pvals)
+
+
 
             # check if state has been modified too many times without improvement
             if stateRepeatList[state] >= maxStateRepeat > 0:
@@ -436,9 +442,8 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
 
             # compare continuity differences from this state swapped with all other states
             for i in range(state + 1, numStates):
-                if i < lobound or i >= upbound:
-                    continue
-                # get energy and norm for each state at this point
+                # point is allowed to swap with states outside of bounds
+
                 Evals[[state, i], pnt] = Evals[[i, state], pnt]
                 Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
 

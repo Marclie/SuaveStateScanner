@@ -494,26 +494,17 @@ def interpMissing(Evals, Pvals, allPnts, numStates):
     """Interpolate missing values in Evals and Pvals"""
     print("Interpolating missing values", flush=True)
     # interpolate all missing values
-    for state in range(numStates):
+    for i in range(numStates):
+        for j in range(Pvals.shape[2]): # loop over properties
+            # get the indices of non-missing values
+            idx = np.isfinite(Pvals[i, :, j])
+            # interpolate the missing values over points
+            Pvals[i, :, j] = interpolate.interp1d(allPnts[idx], Pvals[i, idx, j], kind='cubic', fill_value='extrapolate')(allPnts)
 
-        ## interpolate energies
         # get the indices of non-missing values
-        idx = np.isfinite(Evals[state, :])
+        idx = np.isfinite(Evals[i, :])
         # interpolate the missing values over points
-        Evals[state, :] = interpolate.interp1d(allPnts[idx], Evals[state, idx], kind='cubic', fill_value='extrapolate')(
-            allPnts)
-
-        ## interpolate properties (Pvals)
-        # make grid of all finite points
-        grid_pnt, grid_prop = np.mgrid[0:Pvals.shape[1], 0:Pvals.shape[2]]
-
-        # get the indices of non-missing values
-        idx = np.isfinite(Pvals[state, :, :])
-
-        # interpolate the missing values over points and properties
-        Pvals[state, :, :] = interpolate.griddata((grid_pnt[idx], grid_prop[idx]), Pvals[state, idx], (grid_pnt, grid_prop), method='cubic')
-
-
+        Evals[i, :] = interpolate.interp1d(allPnts[idx], Evals[i, idx], kind='cubic', fill_value='extrapolate')(allPnts)
 
 
 @njit(parallel=True, cache=True)

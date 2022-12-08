@@ -271,22 +271,32 @@ def arrangeStates(Evals, Pvals, allPnts, configVars):
                     print("###", "Skipping", "###", flush=True)
                     continue
                 else:
-                    # if state has been ignored for too long, test it again
-                    stateRepeatList[state] = 0
+                    # if state has been ignored for too long, test it again twice
+                    stateRepeatList[state] = abs(maxStateRepeat - 2)
 
             # reorder states across points for current state moving forwards
-            sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, numStates, configVars)
+            modifiedStates = sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, numStates, configVars)
 
             if sweepBack:
                 # reorder states across points for current state moving backwards
-                sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, numStates, configVars, backwards=True)
+                backModifiedStates = sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, numStates, configVars, backwards=True)
+
+                # merge modified states from forward and backward sweeps
+                for modstates in backModifiedStates:
+                    if modstates not in modifiedStates:
+                        modifiedStates.append(modstates)
 
             # check if state has been modified
             delMax = stateDifference(Evals, Pvals, stateEvals, statePvals, state)
             if delMax < 1e-12:
                 stateRepeatList[state] += 1
             else:
-                stateRepeatList[state] = 0
+                stateRepeatList[state] = 0 # reset counter if state has been modified
+
+            # check if any other states have been modified
+            for modstate in modifiedStates:
+                stateRepeatList[modstate] = 0 # reset counter for modified states
+
         endSweeptime = time.time()
 
         # reset states to original order with missing values
@@ -340,6 +350,7 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
     :param numStates: number of states
     :param configVars: list of configuration variables
     :param backwards: if True, sweep backwards
+    :return: List of states that were modified
     """
 
     # set parameters from configuration file
@@ -368,7 +379,7 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
         start -= maxorder
 
 
-
+    modifiedStates = []
     for pnt in range(start, end, delta):
         sys.stdout.flush()
         direction = "FORWARDS"
@@ -465,6 +476,10 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
                 # update stateMap
                 stateMap[[state, newState], pnt] = stateMap[[newState, state], pnt]
 
+                # update modifiedStates
+                if newState not in modifiedStates:
+                    modifiedStates.append(newState)
+
             lastDif = minDif
             itr += 1
         if itr >= maxiter:
@@ -472,6 +487,7 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
         else:
             print(lastDif, flush=True)
         sys.stdout.flush()
+    return modifiedStates
 
 
 def interpMissing(Evals, Pvals, allPnts, numStates):

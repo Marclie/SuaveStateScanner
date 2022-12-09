@@ -186,9 +186,17 @@ If your data is not converging and/or the order of states is not accurate, there
     - The 'cutoff' should be small since points towards the right will often be sorted inaccurately, however sometimes a value greater than 1 may give better results.
     - The 'maxPan' value defaults to None which puts no limits on how much the sliding window for finite differences pivots around a central point. It can help to set a small value for this, so fewer combinations of points are considered to compute the change of energy w.r.t a state swapping.
 
-- Experiement with using different properties to describe each state. Some properties will contribute more to the calculation of the finite differences than others, or some properties may be less continuous than others at each point (i.e. x-, y- transition dipoles that can mix arbitrarily for c1-symmetry calculations). It may help to normalize all properties for each state so properties are treated on equal footing or enable the 'makePos' flag in the config file to eliminate dependence on sign.
+- Experiment with using different properties to describe each state. Some properties will contribute more to the calculation of the finite differences than others, or some properties may be less continuous than others at each point (i.e. x-, y- transition dipoles that can mix arbitrarily for c1-symmetry calculations). It may help to normalize all properties for each state so properties are treated on equal footing or enable the 'makePos' flag in the config file to eliminate dependence on sign.
 
 - Try shuffling the order of energy eigenvalues for each state along each point sampled from electronic structure calculations or other types of calculations. This can sometimes improve performance on data processed by SuaveStateScanner as input, where parameters from the initial configuration prevents states from being swapped. To do this, simply set the 'doShuffle' parameter to True in the config file.
+
+- Consider sorting the states in batches with different bounds for the points (pntBounds), states (stateBounds), and energies (eBounds). This can help to identify the correct order of states for each batch, which can then be used to sort the entire data set.
+
+- For problematic points that cause the script to fail, you can try to manually reorder the states at that point. This can be done by editing the input file and changing the order of the states at that point. The script will then use this new order as the starting point for its reordering procedure.
+
+- Additionally, you can set the energy and properties of the problematic points to 'nan' in the input file. The script will then ignore these points via interpolation and will not try to reorder the states at these points. Unless the 'keepInterp' parameter is set to True, the script will not output the interpolated points in the output file (those points will have 'nan' for the energy and properties).
+
+- If you are still having trouble, please contact me at my [email](mailto:mliebenthal@fsu.edu) or submit a ticket and I will try to help you out.
 
 Make sure to plot the guess ordering at different iterations from the 'tempOutput.csv' file. This can help you recognize if a set of parameters will work or not before waiting for the reordering procedure to terminate. The reordering procedure will repeat the scan over all points for the number of points squared, or until no more state swaps improve the continuity at each point. For degenerate states with identical properties, this can sometimes cause issues where the two states swap with each other arbitrarily for each scan. In this case, it is ideal to terminate the calculation and use tempOutput.csv as the final result.
 

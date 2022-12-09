@@ -328,7 +328,7 @@ def arrangeStates(Evals, Pvals, allPnts, configVars):
             print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
             if keepInterp:
                 if hasMissing:
-                    interpMissing(Evals, Pvals, allPnts, numStates)
+                    interpMissing(Evals, Pvals, allPnts, numStates, accurate=True)
             sortEnergies(Evals, Pvals)
             return Evals, Pvals
 
@@ -337,7 +337,7 @@ def arrangeStates(Evals, Pvals, allPnts, configVars):
     print("!!!!!!!!!!!!!!!!!!!! FAILED TO CONVERRGE !!!!!!!!!!!!!!!!!!!!", flush=True)
     if keepInterp:
         if hasMissing:
-            interpMissing(Evals, Pvals, allPnts, numStates)
+            interpMissing(Evals, Pvals, allPnts, numStates, accurate=True)
     sortEnergies(Evals, Pvals)
     return Evals, Pvals
 
@@ -495,21 +495,25 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
     return modifiedStates
 
 
-def interpMissing(Evals, Pvals, allPnts, numStates):
+def interpMissing(Evals, Pvals, allPnts, numStates, accurate=False):
     """Interpolate missing values in Evals and Pvals"""
     print("Interpolating missing values", flush=True)
+
+    interpKind = 'zero' # zero order interpolation (cause abrupt changes in amplitude, which makes it easier to find discontinuities)
+    if accurate:
+        interpKind = 'cubic' # cubic interpolation for more accurate results at print
     # interpolate all missing values
     for i in range(numStates):
         for j in range(Pvals.shape[2]): # loop over properties
             # get the indices of non-missing values
             idx = np.isfinite(Pvals[i, :, j])
             # interpolate the missing values over points
-            Pvals[i, :, j] = interpolate.interp1d(allPnts[idx], Pvals[i, idx, j], kind='cubic', fill_value='extrapolate')(allPnts)
+            Pvals[i, :, j] = interpolate.interp1d(allPnts[idx], Pvals[i, idx, j], kind=interpKind, fill_value='extrapolate')(allPnts)
 
         # get the indices of non-missing values
         idx = np.isfinite(Evals[i, :])
         # interpolate the missing values over points
-        Evals[i, :] = interpolate.interp1d(allPnts[idx], Evals[i, idx], kind='cubic', fill_value='extrapolate')(allPnts)
+        Evals[i, :] = interpolate.interp1d(allPnts[idx], Evals[i, idx], kind=interpKind, fill_value='extrapolate')(allPnts)
 
 
 @njit(parallel=True, cache=True)

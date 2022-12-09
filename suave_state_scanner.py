@@ -364,9 +364,6 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
     stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, \
     makePos, doShuffle = configVars
 
-    if pntBounds is None:
-        pntBounds = [0, numPoints]
-
     # reorder states across points for current state moving forwards or backwards in 'time'
     start = pntBounds[0]
     end = pntBounds[1]
@@ -769,7 +766,7 @@ def applyConfig(configPath=None):
     return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, makePos, doShuffle
 
 
-def parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar=0, eBounds=None):
+def parseInputFile(infile, numStates, makePos, doShuffle, printVar=0):
     """
     This function extracts state information from a file
 
@@ -857,7 +854,7 @@ def main(infile, outfile, numStates, configPath=None):
     sys.stdout.flush()
 
     # Parse the configuration file
-    configVars = applyConfig(configPath)
+    configVars = list(applyConfig(configPath))
 
     printVar, orders, width, futurePnts, maxPan, \
     stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, \
@@ -868,8 +865,13 @@ def main(infile, outfile, numStates, configPath=None):
     numba.set_num_threads(1 if nthreads is None else nthreads)
 
     # Parse the input file
-    Evals, Pvals, allPnts = parseInputFile(infile, numStates, stateBounds, makePos, doShuffle, printVar, eBounds)
+    Evals, Pvals, allPnts = parseInputFile(infile, numStates, makePos, doShuffle, printVar)
     sortEnergies(Evals, Pvals)
+
+    if pntBounds is None:
+        configVars[7] = [0, len(allPnts)]
+    if stateBounds is None:
+        configVars[5] = [0, numStates]
 
     # Calculate the stencils and reorder the data
     startArrange = time.time()

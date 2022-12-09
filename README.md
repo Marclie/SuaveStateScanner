@@ -207,7 +207,7 @@ When using SuaveStateScanner for research projects, please cite:
 
 ```
 @misc{SuaveStateScanner,
-    author       = {Marcus D. Liebenthal},
+    author       = {Marcus Dante Liebenthal},
     title        = {{SuaveStateScanner}: https://github.com/Marclie/SuaveStateScanner},
     month        = {August},
     year         = {2022},

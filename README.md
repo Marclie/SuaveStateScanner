@@ -174,8 +174,8 @@ All configurations in the configuration file are optional and are defined as fol
   structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed
   by SuaveStateScanner as input but isn't strictly necessary so default value is False. (default: False)
 
-* `redundantSwaps` - Whether to allow redundant swaps. The current alogrithm will only swap the current state with higher lying states. 
-  This for performance reasons since the lower lying states should already be in the correct order after a few iterations. However,
+* `redundantSwaps` - Whether to allow redundant swaps. The current algorithm will only swap the current state with higher lying states. 
+  This is done for performance reasons since the lower lying states should already be in the correct order after a few iterations. However,
   if the user wants to allow the redundant swaps for troubleshooting purposes, this parameter can be set to True. (default: False)
 
 Troubleshooting

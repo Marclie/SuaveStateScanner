@@ -209,7 +209,7 @@ def arrangeStates(Evals, Pvals, allPnts, configVars):
     # set parameters from configuration file
     printVar, orders, width, futurePnts, maxPan, \
     stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, \
-    makePos, doShuffle = configVars
+    makePos, doShuffle, redundantSwaps = configVars
 
     print("\n\n\tConfiguration Parameters:\n", flush=True)
     print("printVar", printVar, flush=True)
@@ -362,7 +362,7 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
     # set parameters from configuration file
     printVar, orders, width, futurePnts, maxPan, \
     stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, \
-    makePos, doShuffle = configVars
+    makePos, doShuffle, redundantSwaps = configVars    
 
     # reorder states across points for current state moving forwards or backwards in 'time'
     start = pntBounds[0]
@@ -438,9 +438,12 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
             minDif = (diff, state)
 
             # compare continuity differences from this state swapped with all other states
-            for i in range(state + 1, numStates):
-                # point is allowed to swap with states outside of bounds
+            swapStart = state + 1
+            if redundantSwaps:
+                swapStart = 0
 
+            # loop through all states to find the best swap
+            for i in range(swapStart, numStates): # point is allowed to swap with states outside of bounds
                 Evals[[state, i], pnt] = Evals[[i, state], pnt]
                 Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
 
@@ -644,8 +647,10 @@ def applyConfig(configPath=None):
     makePos = False
     doShuffle = False
     maxStateRepeat = -1
+    redundantSwaps = False
+    
     if configPath is None:
-        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, makePos, doShuffle
+        return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, makePos, doShuffle, redundantSwaps
 
     configer = open(configPath, 'r')
     for line in configer.readlines():
@@ -757,13 +762,18 @@ def applyConfig(configPath=None):
                 doShuffle = True
             else:
                 doShuffle = False
+        if "redundantSwaps" in line:
+            if "True" in splitLine[1] or "true" in splitLine[1]:
+                redundantSwaps = True
+            else:
+                redundantSwaps = False
     if width <= 0 or width <= max(orders):
         print(
             "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
         width = max(orders) + 3
     configer.close()
     
-    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, makePos, doShuffle
+    return printVar, orders, width, futurePnts, maxPan, stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, makePos, doShuffle, redundantSwaps
 
 
 def parseInputFile(infile, numStates, makePos, doShuffle, printVar=0):
@@ -858,7 +868,7 @@ def main(infile, outfile, numStates, configPath=None):
 
     printVar, orders, width, futurePnts, maxPan, \
     stateBounds, maxStateRepeat, pntBounds, sweepBack, eBounds, keepInterp, nthreads, \
-    makePos, doShuffle = configVars
+    makePos, doShuffle, redundantSwaps = configVars    
 
 
     # set the number of threads
@@ -867,7 +877,7 @@ def main(infile, outfile, numStates, configPath=None):
     # Parse the input file
     Evals, Pvals, allPnts = parseInputFile(infile, numStates, makePos, doShuffle, printVar)
     sortEnergies(Evals, Pvals)
-
+    
     if pntBounds is None:
         configVars[7] = [0, len(allPnts)]
     if stateBounds is None:

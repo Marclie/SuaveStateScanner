@@ -99,6 +99,7 @@ maxStateRepeat = None
 nthreads = 7
 makePos = True
 doShuffle = False
+redundantSwaps = False
 ```
 
 All configurations in the configuration file are optional and are defined as follows:
@@ -173,6 +174,10 @@ All configurations in the configuration file are optional and are defined as fol
   structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed
   by SuaveStateScanner as input but isn't strictly necessary so default value is False. (default: False)
 
+* `redundantSwaps` - Whether to allow redundant swaps. The current alogrithm will only swap the current state with higher lying states. 
+  This for performance reasons since the lower lying states should already be in the correct order after a few iterations. However,
+  if the user wants to allow the redundant swaps for troubleshooting purposes, this parameter can be set to True. (default: False)
+
 Troubleshooting
 ------------
 If your data is not converging and/or the order of states is not accurate, there are a few things you can try:
@@ -185,6 +190,8 @@ If your data is not converging and/or the order of states is not accurate, there
     - It's usually ideal to have a large width with a small spacing of points; this helps capture more local information of the state. However, this will increase the cost of reordering. 
     - The 'cutoff' should be small since points towards the right will often be sorted inaccurately, however sometimes a value greater than 1 may give better results.
     - The 'maxPan' value defaults to None which puts no limits on how much the sliding window for finite differences pivots around a central point. It can help to set a small value for this, so fewer combinations of points are considered to compute the change of energy w.r.t a state swapping.
+    - The 'futurePnts' parameter should almost always be set to 0. This parameter is used to include points on the right of the center point in the stencil. However, these points are not sorted and will often give inaccurate derivatives.
+    - Setting redundantSwaps to True will allow the algorithm to swap the current state with lower lying states. This should not be necessary in most cases, but can be useful for troubleshooting.
 
 - Experiment with using different properties to describe each state. Some properties will contribute more to the calculation of the finite differences than others, or some properties may be less continuous than others at each point (i.e. x-, y- transition dipoles that can mix arbitrarily for c1-symmetry calculations). It may help to normalize all properties for each state so properties are treated on equal footing or enable the 'makePos' flag in the config file to eliminate dependence on sign.
 

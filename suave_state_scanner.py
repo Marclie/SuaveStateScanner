@@ -27,10 +27,10 @@ import scipy.interpolate as interpolate
 from nstencil import makeStencil
 
 
-def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, maxPan, backwards=False):
+def generateDerivatives(bounds, center, F, allPnts, minh, orders, width, futurePnts, maxPan, backwards=False):
     """
-    @brief This function approximates the n-th order derivatives of a the energies and properties at a point.
-    @param N: the number of points in the state
+    @brief This function approximates the n-th order derivatives of the energies and properties at a point.
+    @param bounds: The bounds of the stencil
     @param center: the index of the point to approximate the derivatives at
     @param F: the energies and properties of the state to be reordered and each state above it across each point
     @param allPnts: the reaction coordinate values of each point
@@ -40,18 +40,18 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, 
     @param futurePnts: the number of points to the right of the center to use in the finite difference approximation
     @param maxPan: the maximum number of pivots of the sliding windows for the stencil to use in the 
                    finite difference approximation
-    
+    @param backwards: whether to approximate the derivatives backwards or forwards from the center
     @return: the n-th order finite differences of the energies and properties at the center point    
     """
 
     if orders is None:
         orders = [1]
-    if width <= 1 or width > N:
-        width = N
+    if width <= 1 or width > bounds[1]:
+        width = bounds[1]
     if maxPan is None:
-        maxPan = N
+        maxPan = bounds[1]
     if futurePnts is None:
-        futurePnts = N
+        futurePnts = 0
 
     combinedStencils = {}
     setDiff = False
@@ -70,12 +70,12 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, 
                     break
                 if backwards:
                     idx = -idx
-                if 0 <= center + idx < N:
+                if bounds[0] <= center + idx < bounds[1]:
                     s.append(idx)
             sN = len(s)
 
             # ensure stencil is large enough for finite difference and not larger than data set
-            if sN <= order or sN > N or sN <= 1:
+            if sN <= order or sN > bounds[1] or sN <= 1:
                 continue
 
             # ensure center point is included in stencil
@@ -106,7 +106,7 @@ def generateDerivatives(N, center, F, allPnts, minh, orders, width, futurePnts, 
             offCount += 1
 
     if not setDiff:
-        raise "No finite differences were computed!"
+        raise ValueError("No finite difference coefficients were computed. Try increasing the width of the stencil.")
 
     stencils = np.asarray(list(combinedStencils.items()), dtype=np.float32)
     stencil = stencils[:, 0].astype(int)
@@ -392,8 +392,8 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
         if backwards:
             direction = "BACKWARDS"
         print("\n%%%%%%%%%%", "SWEEP " + direction + ":", sweep, "%%%%%%%%%%", flush=True)
-        print("@@@@@@@", "STATE", state, "@@@@@@@@@", flush=True)
-        print("###", "POINT", pnt, "###", flush=True)
+        print("@@@@@@@", "STATE", str(state) + " / " + str(numStates), "@@@@@@@@@", flush=True)
+        print("###", "POINT", str(pnt) + " / " + str(numPoints), "###", flush=True)
 
         repeat = 0
         repeatMax = 1
@@ -427,12 +427,12 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
         while repeat <= repeatMax and itr < maxiter:
 
             # nth order finite difference
-            diffE = generateDerivatives(numPoints, pnt, Evals[lobound:upbound], allPnts, minh, orders, width,
-                                        futurePnts,
-                                        maxPan, backwards=backwards)
-            diffP = generateDerivatives(numPoints, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width,
-                                        futurePnts,
-                                        maxPan, backwards=backwards)
+            diffE = generateDerivatives(pntBounds, pnt, Evals[lobound:upbound], allPnts, minh, orders, width,
+                                        futurePnts, maxPan,
+                                        backwards=backwards)
+            diffP = generateDerivatives(pntBounds, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width,
+                                        futurePnts, maxPan,
+                                        backwards=backwards)
 
             if diffE.size == 0 or diffP.size == 0:
                 continue
@@ -448,12 +448,12 @@ def sweepPoints(Evals, Pvals, stateMap, allPnts, minh, state, sweep, numPoints, 
                 Pvals[[state, i], pnt] = Pvals[[i, state], pnt]
 
                 # nth order finite difference
-                diffE = generateDerivatives(numPoints, pnt, Evals[lobound:upbound], allPnts, minh, orders, width,
-                                            futurePnts,
-                                            maxPan, backwards=backwards)
-                diffP = generateDerivatives(numPoints, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width,
-                                            futurePnts,
-                                            maxPan, backwards=backwards)
+                diffE = generateDerivatives(pntBounds, pnt, Evals[lobound:upbound], allPnts, minh, orders, width,
+                                            futurePnts, maxPan,
+                                            backwards=backwards)
+                diffP = generateDerivatives(pntBounds, pnt, Pvals[lobound:upbound], allPnts, minh, orders, width,
+                                            futurePnts, maxPan,
+                                            backwards=backwards)
 
                 if diffE.size == 0 or diffP.size == 0:
                     continue
@@ -499,7 +499,7 @@ def interpMissing(Evals, Pvals, allPnts, numStates, accurate=False):
     """Interpolate missing values in Evals and Pvals"""
     print("Interpolating missing values", flush=True)
 
-    interpKind = 'zero' # zero order interpolation (cause abrupt changes in amplitude, which makes it easier to find discontinuities)
+    interpKind = 'nearest' # nearest interpolation (cause abrupt changes in amplitude, which makes it easier to find discontinuities)
     if accurate:
         interpKind = 'cubic' # cubic interpolation for more accurate results at print
     # interpolate all missing values

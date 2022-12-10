@@ -84,24 +84,28 @@ Configuration File Format
 The configuration file is a text file with the following format:
 
 ```
-# This is a comment line. All lines starting with '#' will be ignored.
-# This is a comment line. All lines starting with '#' will be ignored.
-printVar = 0
-maxIter = 1000
-orders = [1]
-width = 5
-futurePnts = 0
-maxPan = None
-stateBounds = None
-pntBounds = None
-sweepBack = True
-eBounds = None
-keepInterp = False
-maxStateRepeat = None
-nthreads = 7
-makePos = True
-doShuffle = False
-redundantSwaps = False
+# This is a comment line. All lines starting with '#' will be ignored. 
+# Equal signs are required. Whitespace is ignored.
+# Arrays are specified with square brackets and commas.
+# The following are the default values for the configuration file:
+
+printVar = 0           # index for energy or property to print
+maxiter = 1000         # maximum number of iterations
+orders = [1]           # orders of derivatives to use
+width = 5              # stencil width
+futurePnts = 0         # number of future points to use
+maxPan = None          # maximum pivots of stencil width
+stateBounds = None     # bounds for states to use
+pntBounds = None       # bounds for points to use
+sweepBack = True       # whether to sweep backwards across points after reordering forwards
+eBounds = None         # bounds for energies to use
+eWidth = None          # width for valid energies to swap with current state at a point
+keepInterp = False     # whether to keep the interpolated energies and properties
+nthreads = 1           # number of threads to use
+makePos = False        # whether to make the properties positive
+doShuffle = False      # whether to shuffle the points before reordering
+maxStateRepeat = -1    # maximum number of times to repeat swapping an unmodified state
+redundantSwaps = False # whether to allow redundant swaps of lower-lying states
 ```
 
 All configurations in the configuration file are optional and are defined as follows:
@@ -156,6 +160,10 @@ All configurations in the configuration file are optional and are defined as fol
   in the form [emin, emax] specifying inclusive lower and upper bounds on energies. By default all available
   energies will be included in analysis/output unless eBounds is specified otherwise. (default: None)
 
+* `eWidth` - The 'eWidth' parameter defines the energy width for valid energies to swap with current state at a point.
+   This parameter is optional and must be a positive float. If this parameter is not provided, 
+   the default value 'None' will be used, meaning there is no limit to the energy width. (default: None)
+
 * `keepInterp` - The 'keepInterp' parameter defines whether to keep the interpolated missing points in the output file. 
    This parameter is optional and must be a boolean. If this parameter is not provided, 
    the default value 'False' will be used. Note: if this parameter is set to True, the missing points will not be identified
@@ -202,7 +210,7 @@ If your data is not converging and/or the order of states is not accurate, there
 
 - Try shuffling the order of energy eigenvalues for each state along each point sampled from electronic structure calculations or other types of calculations. This can sometimes improve performance on data processed by SuaveStateScanner as input, where parameters from the initial configuration prevents states from being swapped. To do this, simply set the `doShuffle` parameter to True in the config file.
 
-- Consider sorting the states in batches with different bounds for the points `pntBounds`, states `stateBounds`, and energies `eBounds`. This can help to identify the correct order of states for each batch, which can then be used to sort the entire data set.
+- Consider sorting the states in batches with different bounds for the points `pntBounds`, states `stateBounds`, and energies (`eBounds` and/or `eWidth`). This can help to identify the correct order of states for each batch, which can then be used to sort the entire data set.
 
 - For problematic points that cause the script to fail, you can try to manually reorder the states at that point. This can be done by editing the input file and changing the order of the states at that point. The script will then use this new order as the starting point for its reordering procedure.
 

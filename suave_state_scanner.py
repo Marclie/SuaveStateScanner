@@ -156,6 +156,7 @@ class SuaveStateScanner:
         self.pntBounds = None # bounds for points to use
         self.sweepBack = True # whether to sweep backwards across points after reordering forwards
         self.eBounds = None # bounds for energies to use
+        self.eWidth = None # width for valid energies to swap with current state at a point
         self.keepInterp = False # whether to keep the interpolated energies and properties
         self.nthreads = 1 # number of threads to use
         self.makePos = False # whether to make the properties positive
@@ -197,12 +198,13 @@ class SuaveStateScanner:
         print("stateBounds", self.stateBounds, flush=True)
         print("maxStateRepeat", self.maxStateRepeat, flush=True)
         print("eBounds", self.eBounds, flush=True)
+        print("eWidth", self.eWidth, flush=True)
         print("keepInterp", self.keepInterp, flush=True)
         print("nthreads", self.nthreads, flush=True)
         print("makePos", self.makePos, flush=True)
         print("doShuffle", self.doShuffle, flush=True)
         print("redundantSwaps", self.redundantSwaps, flush=True)
-        print("\n\n", flush=True)
+        print("", flush=True)
 
     def generateDerivatives(self, center, F, minh, backwards=False):
         """
@@ -289,10 +291,12 @@ class SuaveStateScanner:
         stencil = stencils[:, 0].astype(int)
         alphas = stencils[:, 1]
         sN = len(combinedStencils)
+        nStates = F.shape[0]
         if len(F.shape) == 3:
-            diff = zeros((F.shape[0], sN, F.shape[2]))
+            num_props = F.shape[2]
+            diff = zeros((nStates, sN, num_props))
         elif len(F.shape) == 2:
-            diff = zeros((F.shape[0], sN))
+            diff = zeros((nStates, sN))
         else:
             raise "energies and/or features have incompatible dimensions"
 
@@ -507,30 +511,43 @@ class SuaveStateScanner:
                 lobound = self.stateBounds[0]
                 upbound = self.stateBounds[1]
 
+
+            validStates = [] # list of states that are valid for reordering
+
             if self.eBounds is not None:
-                # if energy bounds are specified, specify upper bound as the last state with energy below the upper energy bound
-                for idx in range(state, self.numStates):
-                    if self.Evals[idx, pnt] > self.eBounds[1]:
-                        if upbound > idx > lobound:
-                            upbound = idx
-                        break
-                # if energy bounds are specified, specify lower bound as the first state with energy above the lower energy bound
-                for idx in range(state, -1, -1):
-                    if self.Evals[idx, pnt] < self.eBounds[0]:
-                        if lobound < idx < upbound:
-                            lobound = idx
-                        break
+                # if energy bounds are specified, only consider states within the energy bounds
+                for idx in range(lobound, upbound):
+                    if self.eBounds[0] <= self.Evals[idx, pnt] <= self.eBounds[1]:
+                        validStates.append(idx)
+
+            if self.eWidth is not None:
+                # if energy width is specified, only consider states within the energy width
+                for idx in range(lobound, upbound):
+                    if abs(self.Evals[state, pnt] - self.Evals[idx, pnt]) <= self.eWidth:
+                        if idx not in validStates:
+                            validStates.append(idx)
+
+            if self.eWidth is None and self.eBounds is None:
+                # if no energy bounds are specified, consider all states
+                for idx in range(lobound, upbound):
+                    validStates.append(idx)
+
+            if len(validStates) == 0:
+                # if no states are valid, skip this point
+                print("No valid states found for point", pnt, flush=True)
+                continue
 
             swapStart = state + 1 # start swapping states at the next state
             if self.redundantSwaps: # if redundant swaps are allowed, start swapping states at the first state
                 swapStart = 0
 
-            # selection Sort algorithm to rearrange states
+            # Bubble Sort algorithm to rearrange states
             while repeat <= repeatMax and itr < maxiter:
 
                 # nth order finite difference
-                diffE = self.generateDerivatives(pnt, self.Evals[lobound:upbound], minh, backwards=backwards)
-                diffP = self.generateDerivatives(pnt, self.Pvals[lobound:upbound], minh, backwards=backwards)
+                # compare continuity differences from this state swapped with all other states
+                diffE = self.generateDerivatives(pnt, self.Evals[validStates], minh, backwards=backwards)
+                diffP = self.generateDerivatives(pnt, self.Pvals[validStates], minh, backwards=backwards)
 
                 if diffE.size == 0 or diffP.size == 0:
                     continue
@@ -538,16 +555,20 @@ class SuaveStateScanner:
                 diff = self.getMetric(diffE, diffP)
                 minDif = (diff, state)
 
-                # compare continuity differences from this state swapped with all other states
-
                 # loop through all states to find the best swap
                 for i in range(swapStart, self.numStates): # point is allowed to swap with states outside of bounds
+
+                    if self.eWidth is not None:
+                        # if energy width is specified, only consider states within the energy width
+                        if i not in validStates:
+                            continue
+
                     self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
                     self.Pvals[[state, i], pnt] = self.Pvals[[i, state], pnt]
 
                     # nth order finite difference
-                    diffE = self.generateDerivatives(pnt, self.Evals[lobound:upbound], minh, backwards=backwards)
-                    diffP = self.generateDerivatives(pnt, self.Pvals[lobound:upbound], minh, backwards=backwards)
+                    diffE = self.generateDerivatives(pnt, self.Evals[validStates], minh, backwards=backwards)
+                    diffP = self.generateDerivatives(pnt, self.Pvals[validStates], minh, backwards=backwards)
 
                     if diffE.size == 0 or diffP.size == 0:
                         continue
@@ -699,22 +720,27 @@ class SuaveStateScanner:
         configer = open(self.configPath, 'r')
         for line in configer.readlines():
             line = line.replace("\n", "").replace(" ", "").strip()
-            if line[0] == "#":
+            if line == "": # skip empty lines
                 continue
-            splitLine = line.split("=")
-            if "printVar" in line:
+            if line[0] == "#": # skip comments
+                continue
+
+            splitLine = line.split("=") # split the line into the parameter and the value
+
+
+            if "printVar" in splitLine[0]:
                 try:
                     self.printVar = int(splitLine[1])
                 except ValueError:
                     print("invalid index for variable to print. Defaulting to '0' for energy", flush=True)
                     self.printVar = 0
-            if "maxiter" in line:
+            if "maxiter" in splitLine[0]:
                 try:
                     self.maxiter = int(splitLine[1])
                 except ValueError:
                     print("invalid maxiter. Defaulting to '1000'", flush=True)
                     self.maxiter = 1000
-            if "order" in line:
+            if "order" in splitLine[0]:
                 try:
                     self.orders = stringToList(splitLine[1])
                     self.orders = [int(order) for order in self.orders]
@@ -726,27 +752,27 @@ class SuaveStateScanner:
                     print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'",
                           flush=True)
                     self.orders = [1]
-            if "width" in line:
+            if "width" in splitLine[0]:
                 try:
                     self.width = int(splitLine[1])
                 except ValueError:
                     print("invalid type for width. Defaulting to '8'", flush=True)
                     self.width = 8
-            if "futurePnts" in line:
+            if "futurePnts" in splitLine[0]:
                 try:
                     self.futurePnts = int(splitLine[1])
                 except ValueError:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("invalid type for futurePnts. Defaulting to '0'", flush=True)
                     self.futurePnts = 0
-            if "maxPan" in line:
+            if "maxPan" in splitLine[0]:
                 try:
                     self.maxPan = int(splitLine[1])
                 except ValueError:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("invalid type for maxPan. Defaulting to 'None'", flush=True)
                     self.maxPan = None
-            if "pntBounds" in line:
+            if "pntBounds" in splitLine[0]:
                 try:
                     self.pntBounds = stringToList(splitLine[1])
                     self.pntBounds = [int(pntBound) for pntBound in self.pntBounds]
@@ -757,12 +783,12 @@ class SuaveStateScanner:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("The pntBounds provided is invalid. Defaulting to 'None'", flush=True)
                     self.pntBounds = None
-            if "sweepBack" in line:
+            if "sweepBack" in splitLine[0]:
                 if "False" in splitLine[1] or "false" in splitLine[1]:
                     self.sweepBack = False
                 else:
                     self.sweepBack = True
-            if "stateBounds" in line:
+            if "stateBounds" in splitLine[0]:
                 try:
                     self.stateBounds = stringToList(splitLine[1])
                     self.stateBounds = [int(stateBound) for stateBound in self.stateBounds]
@@ -773,7 +799,7 @@ class SuaveStateScanner:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("The stateBounds provided is invalid. Defaulting to 'None'", flush=True)
                     self.stateBounds = None
-            if "eBounds" in line:
+            if "eBounds" in splitLine[0]:
                 try:
                     self.eBounds = stringToList(splitLine[1])
                     self.eBounds = [float(eBound) for eBound in self.eBounds]
@@ -784,35 +810,45 @@ class SuaveStateScanner:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("The eBounds provided is invalid. Defaulting to 'None'", flush=True)
                     self.eBounds = None
-            if "keepInterp" in line:
+            if "eWidth" in splitLine[0]:
+                try:
+                    self.eWidth = float(splitLine[1])
+                    if self.eWidth <= 0:
+                        print("The eWidth provided is invalid. Defaulting to 'None'", flush=True)
+                        self.eWidth = None
+                except ValueError:
+                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
+                        print("invalid type for eWidth. Defaulting to 'None", flush=True)
+                    self.eWidth = None
+            if "keepInterp" in splitLine[0]:
                 if "True" in splitLine[1] or "true" in splitLine[1]:
                     self.keepInterp = True
                 else:
                     self.keepInterp = False
-            if "maxStateRepeat" in line:
+            if "maxStateRepeat" in splitLine[0]:
                 try:
                     self.maxStateRepeat = int(splitLine[1])
                 except ValueError:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("invalid type for maxStateRepeat. Defaulting to 'None'", flush=True)
                     self.maxStateRepeat = -1
-            if "nthreads" in line:
+            if "nthreads" in splitLine[0]:
                 try:
                     self.nthreads = int(splitLine[1])
                 except ValueError:
                     print("Invalid nthread size. Defaulting to 1.", flush=True)
                     self.nthreads = 1
-            if "makePos" in line:
+            if "makePos" in splitLine[0]:
                 if "True" in splitLine[1] or "true" in splitLine[1]:
                     self.makePos = True
                 else:
                     self.makePos = False
-            if "doShuffle" in line:
+            if "doShuffle" in splitLine[0]:
                 if "True" in splitLine[1] or "true" in splitLine[1]:
                     self.doShuffle = True
                 else:
                     self.doShuffle = False
-            if "redundantSwaps" in line:
+            if "redundantSwaps" in splitLine[0]:
                 if "True" in splitLine[1] or "true" in splitLine[1]:
                     self.redundantSwaps = True
                 else:

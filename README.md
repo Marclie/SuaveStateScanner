@@ -100,6 +100,7 @@ pntBounds = None       # bounds for points to use
 sweepBack = True       # whether to sweep backwards across points after reordering forwards
 eBounds = None         # bounds for energies to use
 eWidth = None          # width for valid energies to swap with current state at a point
+interpolate = False    # whether to interpolate over nan or inf values
 keepInterp = False     # whether to keep the interpolated energies and properties
 nthreads = 1           # number of threads to use
 makePos = False        # whether to make the properties positive
@@ -160,14 +161,22 @@ All configurations in the configuration file are optional and are defined as fol
   in the form [emin, emax] specifying inclusive lower and upper bounds on energies. By default all available
   energies will be included in analysis/output unless eBounds is specified otherwise. (default: None)
 
+
 * `eWidth` - The 'eWidth' parameter defines the energy width for valid energies to swap with current state at a point.
    This parameter is optional and must be a positive float. If this parameter is not provided, 
    the default value 'None' will be used, meaning there is no limit to the energy width. (default: None)
 
+
+* `interpolate` - The 'interpolate' parameter defines whether to linearly interpolate over nan or inf values. 
+   This parameter is optional and must be a boolean. If this parameter is not provided, 
+   the default value 'False' will be used. If False, the script will explicitly ignore the missing points when
+   calculating finite differences. (default: False)
+
+
 * `keepInterp` - The 'keepInterp' parameter defines whether to keep the interpolated missing points in the output file. 
    This parameter is optional and must be a boolean. If this parameter is not provided, 
    the default value 'False' will be used. Note: if this parameter is set to True, the missing points will not be identified
-   in the output file. (default: False)
+   in the output file. The interpolation is a cubic spline when saved to disk. (default: False)
 
 
 * `maxStateRepeat` - The maximum number of times a state can be repeated without changes in reordering procedure. If this parameter is not provided, the default value 'None' will be used, meaning there is no limit to the number of times a state can be repeated. (default: None)
@@ -186,6 +195,7 @@ All configurations in the configuration file are optional and are defined as fol
 * `doShuffle` - Whether to shuffle order or energy eigenvalues along each curve sampled from electronic
   structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed
   by SuaveStateScanner as input but isn't strictly necessary so default value is False. (default: False)
+
 
 * `redundantSwaps` - Whether to allow redundant swaps. The current algorithm will only swap the current state with higher lying states. 
   This is done for performance reasons since the lower lying states should already be in the correct order after a few iterations. However,
@@ -214,7 +224,7 @@ If your data is not converging and/or the order of states is not accurate, there
 
 - For problematic points that cause the script to fail, you can try to manually reorder the states at that point. This can be done by editing the input file and changing the order of the states at that point. The script will then use this new order as the starting point for its reordering procedure.
 
-- Additionally, you can set the energy and properties of the problematic points to 'nan' in the input file. The script will then ignore these points via interpolation and will not try to reorder the states at these points. Unless the `keepInterp` parameter is set to True, the script will not output the interpolated points in the output file (those points will have 'nan' for the energy and properties).
+- Additionally, you can set the energy and properties of the problematic points to 'nan' in the input file. The script will then ignore these points, either explicitly or via interpolation `interpolate`, and will not try to reorder the states at these points. Unless the `keepInterp` or `interpolate` parameter is set to True, the script will not print the nan/inf points in the output file (those points will have 'nan' for the energy and properties).
 
 - If you are still having trouble, please contact me at my [email](mailto:mliebenthal@fsu.edu) or submit a ticket and I will try to help you out.
 

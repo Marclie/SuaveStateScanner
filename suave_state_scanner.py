@@ -160,6 +160,7 @@ class SuaveStateScanner:
         self.eBounds = None # bounds for energies to use
         self.eWidth = None # width for valid energies to swap with current state at a point
         self.interpolate = False # whether to keep interpolated energies and properties
+        self.keepInterp = False # whether to keep interpolated energies and properties
         self.nthreads = 1 # number of threads to use
         self.makePos = False # whether to make the properties positive
         self.doShuffle = False # whether to shuffle the points before reordering
@@ -202,6 +203,7 @@ class SuaveStateScanner:
         print("eBounds", self.eBounds, flush=True)
         print("eWidth", self.eWidth, flush=True)
         print("interpolate", self.interpolate, flush=True)
+        print("keepInterp", self.keepInterp, flush=True)
         print("nthreads", self.nthreads, flush=True)
         print("makePos", self.makePos, flush=True)
         print("doShuffle", self.doShuffle, flush=True)
@@ -340,7 +342,10 @@ class SuaveStateScanner:
                 print("These will be ignored by interpolating over them during the optimization.\n")
             else:
                 print("These will be ignored explicitly in the finite difference calculations.\n")
-            print("Final results will not include these points.", flush=True)
+            if self.keepInterp:
+                print("WARNING: final energies and properties will contain interpolated values.\n")
+            else:
+                print("Final results will not include these points.", flush=True)
 
         print("\n\n", flush=True)
         time.sleep(1)
@@ -354,7 +359,9 @@ class SuaveStateScanner:
             sweep += 1
 
             startSweeptime = time.time()
+
             # copy initial state info
+            self.sortEnergies()
             lastEvals = copy.deepcopy(self.Evals)
             lastPvals = copy.deepcopy(self.Pvals)
 
@@ -363,23 +370,29 @@ class SuaveStateScanner:
             for pnt in range(self.numPoints):
                 stateMap[:, pnt] = np.arange(self.numStates)
 
-            # create copy of Evals and Pvals with interpolated missing values (if any)
             if self.interpolate:
-                if self.hasMissing:
-                    self.interpMissing(interpKind="cubic")
-            self.sortEnergies()
-            self.saveOrder()
+                # save copy of Evals and Pvals with interpolated missing values (if any)
+                if self.hasMissing and self.keepInterp:
+                    self.interpMissing(interpKind="cubic") # interpolate missing values with cubic spline
+                self.saveOrder()
+                self.Evals = copy.deepcopy(lastEvals)
+                self.Pvals = copy.deepcopy(lastPvals)
+            else:
+                self.saveOrder()
 
             for state in range(self.numStates):
                 # skip state if out of bounds
                 if not (self.stateBounds[0] <= state <= self.stateBounds[1]):
                     continue
 
+                # interpolate missing values (if any) only for reordering
+                if self.interpolate:
+                    if self.hasMissing:
+                        self.interpMissing() # use linear interpolation
+
                 # save initial state info
                 stateEvals = copy.deepcopy(self.Evals)
                 statePvals = copy.deepcopy(self.Pvals)
-
-
 
                 # check if state has been modified too many times without improvement
                 if stateRepeatList[state] >= self.maxStateRepeat > 0:
@@ -438,16 +451,17 @@ class SuaveStateScanner:
             print("SWEEP TIME: {:e}".format(endSweeptime - startSweeptime), flush=True)
             if delMax < 1e-12:
                 converged = True
-            self.sortEnergies()
 
         if converged:
             print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
         else:
             print("!!!!!!!!!!!!!!!!!!!! FAILED TO CONVERRGE !!!!!!!!!!!!!!!!!!!!", flush=True)
 
+        # create copy of Evals and Pvals with interpolated missing values (if any)
         if self.interpolate:
-            if self.hasMissing:
-                self.interpMissing(interpKind="cubic")
+            # save copy of Evals and Pvals with interpolated missing values (if any)
+            if self.hasMissing and self.keepInterp:
+                self.interpMissing(interpKind="cubic") # interpolate missing values with cubic spline
         self.sortEnergies()
 
         endArrange = time.time()
@@ -612,7 +626,7 @@ class SuaveStateScanner:
 
         validStates = []  # list of states that are valid for reordering
         thisValid = True
-        if self.eBounds is not None and thisValid:
+        if self.eBounds is not None:
             # if energy bounds are specified, only consider states within the energy bounds
             for idx in range(lobound, upbound):
                 if self.eBounds[0] <= self.Evals[idx, pnt] <= self.eBounds[1]:
@@ -620,7 +634,10 @@ class SuaveStateScanner:
                 elif idx == state:
                     thisValid = False
                     break
-        if self.eWidth is not None and thisValid:
+        if not thisValid:
+            return validStates, thisValid
+
+        if self.eWidth is not None:
             # if energy width is specified, only consider states within the energy width
             for idx in range(lobound, upbound):
                 if abs(self.Evals[state, pnt] - self.Evals[idx, pnt]) <= self.eWidth:
@@ -629,26 +646,31 @@ class SuaveStateScanner:
                 elif idx == state:
                     thisValid = False
                     break
-        if self.eWidth is None and self.eBounds is None and thisValid:
+        if not thisValid:
+            return validStates, thisValid
+
+        if self.eWidth is None and self.eBounds is None:
             # if no energy bounds are specified, consider all states
             for idx in range(lobound, upbound):
                 validStates.append(idx)
-        if self.hasMissing and thisValid:
+
+        if self.hasMissing and not self.interpolate:
             # if there are missing values, remove states that have missing values
             removeIdx = []
             for idx in validStates:
-                if not np.isfinite(self.Evals[idx, pnt]) or not np.isfinite(self.Pvals[idx, pnt]):
+                if not np.isfinite(self.Evals[idx, pnt]) or not np.any(np.isfinite(self.Pvals[idx, pnt])):
                     removeIdx.append(idx)
                     if idx == state:
                         thisValid = False
                         break
             for idx in removeIdx:
                 validStates.remove(idx)
+
         return validStates, thisValid
 
     def interpMissing(self, interpKind = 'linear'):
         """Interpolate missing values in Evals and Pvals"""
-        print("Interpolating missing values", flush=True)
+        print("\nInterpolating missing values...", end=" ", flush=True)
 
         # interpolate all missing values
         for i in range(self.numStates):
@@ -662,6 +684,7 @@ class SuaveStateScanner:
             idx = np.isfinite(self.Evals[i, :])
             # interpolate the missing values over points
             self.Evals[i, :] = interpolate.interp1d(self.allPnts[idx], self.Evals[i, idx], kind=interpKind, fill_value='extrapolate')(self.allPnts)
+        print("Done", flush=True)
 
 
     # This function will randomize the state ordering for each point
@@ -861,6 +884,11 @@ class SuaveStateScanner:
                     self.interpolate = True
                 else:
                     self.interpolate = False
+            if "keepInterp" in splitLine[0]:
+                if "True" in splitLine[1] or "true" in splitLine[1]:
+                    self.keepInterp = True
+                else:
+                    self.keepInterp = False
             if "maxStateRepeat" in splitLine[0]:
                 try:
                     self.maxStateRepeat = int(splitLine[1])

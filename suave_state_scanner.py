@@ -487,7 +487,7 @@ class SuaveStateScanner:
             direction = "FORWARDS"
             if backwards:
                 direction = "BACKWARDS"
-            print("\n%%%%%%%%%%", "SWEEP " + direction + ":", sweep, "%%%%%%%%%%", flush=True)
+            print("\n%%%%%%%%%%", "SWEEP " + direction + ":", str(sweep) + " / " + str(self.maxiter), "%%%%%%%%%%", flush=True)
             print("@@@@@@@", "STATE", str(state) + " / " + str(self.numStates), "@@@@@@@@@", flush=True)
             print("###", "POINT", str(pnt) + " / " + str(self.numPoints), "###", flush=True)
 
@@ -688,6 +688,8 @@ class SuaveStateScanner:
         """
         @brief This function will set parameters from the configuration file
         """
+        if self.configPath is None: # no config file
+            return # use default values
 
         configer = open(self.configPath, 'r')
         for line in configer.readlines():

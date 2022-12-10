@@ -85,7 +85,9 @@ The configuration file is a text file with the following format:
 
 ```
 # This is a comment line. All lines starting with '#' will be ignored.
+# This is a comment line. All lines starting with '#' will be ignored.
 printVar = 0
+maxIter = 1000
 orders = [1]
 width = 5
 futurePnts = 0
@@ -107,6 +109,9 @@ All configurations in the configuration file are optional and are defined as fol
 * `printVar` - The index for the target property to be printed to the output file. If this is not specified, the
   default is to print the energy of the state. Other values will print a specific property for each state. Negative
   values will index from the end of the list of properties. (default: 0)
+
+
+* `maxIter` - The maximum number of iterations to run the reordering procedure. (default: 1000)
 
 
 * `orders` - The 'orders' parameter defines the orders of derivatives desired for computation. This parameter must be a list of integers.

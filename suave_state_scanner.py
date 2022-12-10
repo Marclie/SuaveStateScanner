@@ -172,6 +172,9 @@ class SuaveStateScanner:
 
         # parse the input file to get the energies and properties for each state at each point
         self.Evals, self.Pvals, self.allPnts = self.parseInputFile()
+
+        if self.doShuffle: # shuffle the points before reordering
+            self.shuffle_energy()
         self.sortEnergies() # sort the states by energy of the first point
 
         self.numPoints = len(self.allPnts) # number of points
@@ -425,7 +428,6 @@ class SuaveStateScanner:
             print("CONVERGENCE PROGRESS: {:e}".format(delMax), flush=True)
             print("SWEEP TIME: {:e}".format(endSweeptime - startSweeptime), flush=True)
             if delMax < 1e-12:
-                print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
                 converged = True
             self.sortEnergies()
 
@@ -498,8 +500,8 @@ class SuaveStateScanner:
             lastDif = (inf, state)
 
             # set bounds for states to be reordered
-            lobound = state  # default is to only reorder states after the current state
-            upbound = self.numStates
+            lobound = 0 # lower state bound
+            upbound = self.numStates # upper state bound
             if self.stateBounds is not None:
                 # if bounds are specified, use them
                 lobound = self.stateBounds[0]
@@ -519,6 +521,10 @@ class SuaveStateScanner:
                             lobound = idx
                         break
 
+            swapStart = state + 1 # start swapping states at the next state
+            if self.redundantSwaps: # if redundant swaps are allowed, start swapping states at the first state
+                swapStart = 0
+
             # selection Sort algorithm to rearrange states
             while repeat <= repeatMax and itr < maxiter:
 
@@ -533,9 +539,6 @@ class SuaveStateScanner:
                 minDif = (diff, state)
 
                 # compare continuity differences from this state swapped with all other states
-                swapStart = state + 1
-                if self.redundantSwaps:
-                    swapStart = 0
 
                 # loop through all states to find the best swap
                 for i in range(swapStart, self.numStates): # point is allowed to swap with states outside of bounds
@@ -586,7 +589,7 @@ class SuaveStateScanner:
         return modifiedStates
 
 
-    def interpMissing(self, interpKind = 'linear'):
+    def interpMissing(self, interpKind = 'cubic'):
         """Interpolate missing values in Evals and Pvals"""
         print("Interpolating missing values", flush=True)
 
@@ -605,16 +608,18 @@ class SuaveStateScanner:
 
 
     # This function will randomize the state ordering for each point
-    def shuffle_energy(self, curves):
+    def shuffle_energy(self):
         """
         @brief This function will randomize the state ordering for each point, except the first point
-        @param curves: The energies and properties of each state at each point
-
         @return: The states with randomized energy ordering
         """
 
-        for pnt in range(1, curves.shape[1]):
-            np.random.shuffle(curves[:, pnt])
+        for pnt in range(self.pntBounds[0], self.pntBounds[1]):
+            # shuffle indices of state for each point
+            idx = np.arange(self.numStates) # get indices of states
+            np.random.shuffle(idx) # shuffle indices
+            self.Evals[:, pnt] = self.Evals[idx, pnt] # shuffle energies
+            self.Pvals[:, pnt, :] = self.Pvals[idx, pnt, :] # shuffle properties
 
 
     # this function loads the state information of a reorder scan from a previous run of this script
@@ -849,8 +854,6 @@ class SuaveStateScanner:
 
         curves = inputMatrix.reshape((numPoints, self.numStates, numColumns))
         curves = np.swapaxes(curves, 0, 1)
-        if self.doShuffle:
-            self.shuffle_energy(curves)
 
         allPnts = curves[0, :, 0]
         Evals = curves[:, :, 1]

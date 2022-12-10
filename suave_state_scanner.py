@@ -145,6 +145,8 @@ class SuaveStateScanner:
         # assign the metric function to a class variable (can be changed by the user)
         self.getMetric = getMetric
 
+        self.hasMissing = False # flag for presence of missing data
+
         ### Default configuration values
         self.printVar = 0 # index for energy or property to print
         self.maxiter = 1000 # maximum number of iterations
@@ -157,7 +159,7 @@ class SuaveStateScanner:
         self.sweepBack = True # whether to sweep backwards across points after reordering forwards
         self.eBounds = None # bounds for energies to use
         self.eWidth = None # width for valid energies to swap with current state at a point
-        self.keepInterp = False # whether to keep the interpolated energies and properties
+        self.interpolate = False # whether to keep interpolated energies and properties
         self.nthreads = 1 # number of threads to use
         self.makePos = False # whether to make the properties positive
         self.doShuffle = False # whether to shuffle the points before reordering
@@ -199,7 +201,7 @@ class SuaveStateScanner:
         print("maxStateRepeat", self.maxStateRepeat, flush=True)
         print("eBounds", self.eBounds, flush=True)
         print("eWidth", self.eWidth, flush=True)
-        print("keepInterp", self.keepInterp, flush=True)
+        print("interpolate", self.interpolate, flush=True)
         print("nthreads", self.nthreads, flush=True)
         print("makePos", self.makePos, flush=True)
         print("doShuffle", self.doShuffle, flush=True)
@@ -331,11 +333,14 @@ class SuaveStateScanner:
         stateRepeatList = np.zeros(self.numStates)
 
         # check if any points are nan or inf
-        hasMissing = np.isnan(self.Evals).any() or np.isinf(self.Evals).any() or np.isnan(self.Pvals).any() or np.isinf(self.Pvals).any()
-        if hasMissing:
-            print("\nWARNING: Energies or properties contain nan or inf values.\n"
-                  "These will be ignored by interpolating over them during the optimization.\n"
-                  "Final results will not include these points.", flush=True)
+        self.hasMissing = np.isnan(self.Evals).any() or np.isinf(self.Evals).any() or np.isnan(self.Pvals).any() or np.isinf(self.Pvals).any()
+        if self.hasMissing:
+            print("\nWARNING: Energies or properties contain nan or inf values.")
+            if self.interpolate:
+                print("These will be ignored by interpolating over them during the optimization.\n")
+            else:
+                print("These will be ignored explicitly in the finite difference calculations.\n")
+            print("Final results will not include these points.", flush=True)
 
         print("\n\n", flush=True)
         time.sleep(1)
@@ -352,7 +357,6 @@ class SuaveStateScanner:
             # copy initial state info
             lastEvals = copy.deepcopy(self.Evals)
             lastPvals = copy.deepcopy(self.Pvals)
-            self.saveOrder()
 
             # create map of current state to last state for each point
             stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
@@ -360,10 +364,11 @@ class SuaveStateScanner:
                 stateMap[:, pnt] = np.arange(self.numStates)
 
             # create copy of Evals and Pvals with interpolated missing values (if any)
-            if hasMissing:
-                self.interpMissing()
-                if self.keepInterp:
-                    self.saveOrder()
+            if self.interpolate:
+                if self.hasMissing:
+                    self.interpMissing(interpKind="cubic")
+            self.sortEnergies()
+            self.saveOrder()
 
             for state in range(self.numStates):
                 # skip state if out of bounds
@@ -440,8 +445,8 @@ class SuaveStateScanner:
         else:
             print("!!!!!!!!!!!!!!!!!!!! FAILED TO CONVERRGE !!!!!!!!!!!!!!!!!!!!", flush=True)
 
-        if self.keepInterp:
-            if hasMissing:
+        if self.interpolate:
+            if self.hasMissing:
                 self.interpMissing(interpKind="cubic")
         self.sortEnergies()
 
@@ -511,26 +516,12 @@ class SuaveStateScanner:
                 lobound = self.stateBounds[0]
                 upbound = self.stateBounds[1]
 
+            validStates, thisValid = self.findValidStates(lobound, pnt, state, upbound)
 
-            validStates = [] # list of states that are valid for reordering
-
-            if self.eBounds is not None:
-                # if energy bounds are specified, only consider states within the energy bounds
-                for idx in range(lobound, upbound):
-                    if self.eBounds[0] <= self.Evals[idx, pnt] <= self.eBounds[1]:
-                        validStates.append(idx)
-
-            if self.eWidth is not None:
-                # if energy width is specified, only consider states within the energy width
-                for idx in range(lobound, upbound):
-                    if abs(self.Evals[state, pnt] - self.Evals[idx, pnt]) <= self.eWidth:
-                        if idx not in validStates:
-                            validStates.append(idx)
-
-            if self.eWidth is None and self.eBounds is None:
-                # if no energy bounds are specified, consider all states
-                for idx in range(lobound, upbound):
-                    validStates.append(idx)
+            if not thisValid:
+                # if the current state is not valid, skip it
+                print("state", state, "is not valid at point", pnt, flush=True)
+                continue
 
             if len(validStates) == 0:
                 # if no states are valid, skip this point
@@ -609,8 +600,53 @@ class SuaveStateScanner:
             sys.stdout.flush()
         return modifiedStates
 
+    def findValidStates(self, lobound, pnt, state, upbound):
+        """
+        Find states that are valid for the current point
+        @param lobound: lower bound for states
+        @param pnt: current point
+        @param state: current state
+        @param upbound: upper bound for states
+        @return (validStates, thisValid) : (list of valid states, True if current state is valid)
+        """
 
-    def interpMissing(self, interpKind = 'cubic'):
+        validStates = []  # list of states that are valid for reordering
+        thisValid = True
+        if self.eBounds is not None and thisValid:
+            # if energy bounds are specified, only consider states within the energy bounds
+            for idx in range(lobound, upbound):
+                if self.eBounds[0] <= self.Evals[idx, pnt] <= self.eBounds[1]:
+                    validStates.append(idx)
+                elif idx == state:
+                    thisValid = False
+                    break
+        if self.eWidth is not None and thisValid:
+            # if energy width is specified, only consider states within the energy width
+            for idx in range(lobound, upbound):
+                if abs(self.Evals[state, pnt] - self.Evals[idx, pnt]) <= self.eWidth:
+                    if idx not in validStates:
+                        validStates.append(idx)
+                elif idx == state:
+                    thisValid = False
+                    break
+        if self.eWidth is None and self.eBounds is None and thisValid:
+            # if no energy bounds are specified, consider all states
+            for idx in range(lobound, upbound):
+                validStates.append(idx)
+        if self.hasMissing and thisValid:
+            # if there are missing values, remove states that have missing values
+            removeIdx = []
+            for idx in validStates:
+                if not np.isfinite(self.Evals[idx, pnt]) or not np.isfinite(self.Pvals[idx, pnt]):
+                    removeIdx.append(idx)
+                    if idx == state:
+                        thisValid = False
+                        break
+            for idx in removeIdx:
+                validStates.remove(idx)
+        return validStates, thisValid
+
+    def interpMissing(self, interpKind = 'linear'):
         """Interpolate missing values in Evals and Pvals"""
         print("Interpolating missing values", flush=True)
 
@@ -820,11 +856,11 @@ class SuaveStateScanner:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("invalid type for eWidth. Defaulting to 'None", flush=True)
                     self.eWidth = None
-            if "keepInterp" in splitLine[0]:
+            if "interpolate" in splitLine[0]:
                 if "True" in splitLine[1] or "true" in splitLine[1]:
-                    self.keepInterp = True
+                    self.interpolate = True
                 else:
-                    self.keepInterp = False
+                    self.interpolate = False
             if "maxStateRepeat" in splitLine[0]:
                 try:
                     self.maxStateRepeat = int(splitLine[1])

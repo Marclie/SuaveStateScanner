@@ -46,11 +46,6 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
         pnt = center + stencil[s]
         diff[:, s] = alphas[s] * F[:, pnt]
 
-    # sum finite difference terms for each state for current stencil.
-    # the absolute value of the finite differences of the energies and properties
-    # should be minimized for the best ordering metric
-    return np.absolute(diff.sum(axis=1))
-
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def getMetric(diffE, diffP):
     """
@@ -68,7 +63,7 @@ def getMetric(diffE, diffP):
     # to enforce the product rule of differentiation for the change in the ordering metric
     return (np.log(1 + diffE * diffP)).sum()
 
-@njit(parallel=True, cache=True)
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
     """
     @brief This function will calculate the difference in the energy from a previous reordering to the current order
@@ -86,7 +81,7 @@ def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
     delMax = delEval.max() + delNval.max()
     return delMax
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def combineVals(Evals, Pvals, allPnts, tempInput):
     """
     @brief This function will reformat the state information for saving
@@ -108,12 +103,23 @@ def combineVals(Evals, Pvals, allPnts, tempInput):
             for feat in prange(numFeat):
                 tempInput[pnt * numStates + state, feat + 2] = Pvals[state, pnt, feat]
 
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
+def mergediff(diff):
+    """
+    @brief This function will merge the finite differences for the energy and properties
+    @param diff: The finite differences for the energy and properties
+    @return: The merged finite differences
+    """
+    return np.absolute(diff.sum(axis=1))
+
+
 def stringToList(string):
     """
     this function will convert a string to a list of integers
     @return:
     """
     return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
+
 
 class SuaveStateScanner:
     """
@@ -213,16 +219,9 @@ class SuaveStateScanner:
     def generateDerivatives(self, center, F, minh, backwards=False):
         """
         @brief This function approximates the n-th order derivatives of the energies and properties at a point.
-        @param bounds: The bounds of the stencil
-        @param center: the index of the point to approximate the derivatives at
+        @param center: The index of the center point
         @param F: the energies and properties of the state to be reordered and each state above it across each point
-        @param allPnts: the reaction coordinate values of each point
-        @param minh: the minimum step size to use in the finite difference approximation
-        @param orders: the orders of the derivatives to approximate
-        @param width: the maximum width of the stencil to use in the finite difference approximation
-        @param futurePnts: the number of points to the right of the center to use in the finite difference approximation
-        @param maxPan: the maximum number of pivots of the sliding windows for the stencil to use in the
-                       finite difference approximation
+        @param minh: the minimum step size to use in the finite difference approximationtion
         @param backwards: whether to approximate the derivatives backwards or forwards from the center
         @return: the n-th order finite differences of the energies and properties at the center point
         """
@@ -305,8 +304,11 @@ class SuaveStateScanner:
             raise "energies and/or features have incompatible dimensions"
 
         # compute combined finite differences from all stencils considered in panning window
-        diffX = approxDeriv(F, diff, center, stencil, alphas, sN)
-        return diffX
+        approxDeriv(F, diff, center, stencil, alphas, sN)
+
+        # set nan/inf values to zero
+        diff[np.isnan(diff) | np.isinf(diff)] = 0
+        return mergediff(diff)
 
 
     def sortEnergies(self):
@@ -563,10 +565,8 @@ class SuaveStateScanner:
                 # loop through all states to find the best swap
                 for i in range(swapStart, self.numStates): # point is allowed to swap with states outside of bounds
 
-                    if self.eWidth is not None:
-                        # if energy width is specified, only consider states within the energy width
-                        if i not in validStates:
-                            continue
+                    if i not in validStates:
+                        continue
 
                     self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
                     self.Pvals[[state, i], pnt] = self.Pvals[[i, state], pnt]
@@ -614,59 +614,43 @@ class SuaveStateScanner:
             sys.stdout.flush()
         return modifiedStates
 
-    def findValidStates(self, lobound, pnt, state, upbound):
+    def findValidStates(self, lobound, pnt, ref, upbound):
         """
         Find states that are valid for the current point
         @param lobound: lower bound for states
         @param pnt: current point
-        @param state: current state
+        @param ref: current state
         @param upbound: upper bound for states
         @return (validStates, thisValid) : (list of valid states, True if current state is valid)
         """
 
-        validStates = []  # list of states that are valid for reordering
+        validArray = np.ones(self.numStates, dtype=bool)
+        validArray.fill(True) # set all states to be valid
+
+        # set all states at points that are not valid to False
         thisValid = True
-        if self.eBounds is not None:
-            # if energy bounds are specified, only consider states within the energy bounds
-            for idx in range(lobound, upbound):
-                if self.eBounds[0] <= self.Evals[idx, pnt] <= self.eBounds[1]:
-                    validStates.append(idx)
-                elif idx == state:
-                    thisValid = False
-                    break
+        for state in range(self.numStates):
+            if self.eBounds is not None:
+                if not(self.eBounds[0] <= self.Evals[state, pnt] <= self.eBounds[1]):
+                    validArray[state] = False
+            if self.eWidth is not None:
+                if self.eWidth < abs(self.Evals[ref, pnt] - self.Evals[state, pnt]):
+                    validArray[state] = False
+            if self.hasMissing: # only check for missing energies
+                Eval_missing = not np.isfinite(self.Evals[state, pnt])
+                if Eval_missing:
+                    validArray[state] = False
+            if not validArray[ref]:
+                thisValid = False
+                break
+
         if not thisValid:
-            return validStates, thisValid
+            # if the current state is not valid, skip it
+            return [], False
 
-        if self.eWidth is not None:
-            # if energy width is specified, only consider states within the energy width
-            for idx in range(lobound, upbound):
-                if abs(self.Evals[state, pnt] - self.Evals[idx, pnt]) <= self.eWidth:
-                    if idx not in validStates:
-                        validStates.append(idx)
-                elif idx == state:
-                    thisValid = False
-                    break
-        if not thisValid:
-            return validStates, thisValid
-
-        if self.eWidth is None and self.eBounds is None:
-            # if no energy bounds are specified, consider all states
-            for idx in range(lobound, upbound):
-                validStates.append(idx)
-
-        if self.hasMissing and not self.interpolate:
-            # if there are missing values, remove states that have missing values
-            removeIdx = []
-            for idx in validStates:
-                if not np.isfinite(self.Evals[idx, pnt]) or not np.any(np.isfinite(self.Pvals[idx, pnt])):
-                    removeIdx.append(idx)
-                    if idx == state:
-                        thisValid = False
-                        break
-            for idx in removeIdx:
-                validStates.remove(idx)
-
-        return validStates, thisValid
+        # convert validArray to list of valid states
+        validStates = np.where(validArray)[0].tolist()
+        return validStates, thisValid # return list of valid states at each point
 
     def interpMissing(self, interpKind = 'linear'):
         """Interpolate missing values in Evals and Pvals"""

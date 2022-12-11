@@ -114,7 +114,7 @@ def mergediff(diff):
 
 
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
-def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWidth, hasMissing):
+def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWidth, hasMissing, hasInterp):
     """
     @brief This function will build the valid array for the current point
     @param validArray: The array of valid states
@@ -126,13 +126,15 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWid
     @param eBounds: The energy bounds for the current point
     @param eWidth: The energy width for the current point
     @param hasMissing: The array of missing states
+    @param hasInterp: The flag for if interpolation is being used
     @return: The valid array for the current point
     """
 
     hasEBounds = eBounds is not None # check if energy bounds are provided
     hasEWidth = eWidth is not None # check if energy width is provided
 
-    if not (hasEBounds or hasEWidth or hasMissing):
+    fullRange = lobound == 0 and upbound == Evals.shape[0] # check if the full range is being used
+    if not (hasEBounds or hasEWidth or (hasMissing and not hasInterp) or fullRange):
         return validArray # if no bounds or missing states, all states are valid
 
     # set all states at points that are not valid to False
@@ -147,6 +149,14 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWid
             Eval_missing = not np.isfinite(Evals[state, pnt])
             if Eval_missing:
                 validArray[state] = False
+
+    # set all states less than lower bound and greater than upper bound to False
+    if not fullRange:
+        for state in prange(lobound):
+            validArray[state] = False
+        for state in prange(upbound, Evals.shape[0]):
+            validArray[state] = False
+
     return validArray
 
 def stringToList(string):
@@ -344,9 +354,8 @@ class SuaveStateScanner:
         approxDeriv(F, diff, center, stencil, alphas, sN)
 
         if self.hasMissing and not self.interpolate:
-            # set nan/inf values to mean value (not sure if this is the best way to handle this)
-            meanVal = np.nanmean(diff)
-            diff[np.isnan(diff) | np.isinf(diff)] = meanVal # for now, set to large value
+            # interpolate derivatives at missing points (not interpolating energies or properties)
+            diff = self.interpolateDerivatives(diff, sN)
         return mergediff(diff)
 
 
@@ -428,7 +437,7 @@ class SuaveStateScanner:
             for pnt in range(self.numPoints):
                 self.stateMap[:, pnt] = np.arange(self.numStates)
 
-            if self.hasMissing:
+            if self.hasMissing and not self.interpolate:
                 self.moveMissing()  # move missing values to end of array
 
 
@@ -676,7 +685,8 @@ class SuaveStateScanner:
         validArray.fill(True)  # set all states to be valid
 
         # set states outside of bounds or missing to be invalid
-        validArray = buildValidArray(validArray, self.Evals, lobound, pnt, ref, upbound, self.eBounds, self.eWidth, self.hasMissing)
+        validArray = buildValidArray(validArray, self.Evals, lobound, pnt, ref, upbound,
+                                     self.eBounds, self.eWidth, self.hasMissing, self.interpolate)
 
         # convert validArray to list of valid states
         validStates = np.where(validArray)[0].tolist()
@@ -700,8 +710,27 @@ class SuaveStateScanner:
             idx = np.isfinite(self.Evals[i, :])
             # interpolate the missing values over points
             self.Evals[i, :] = interpolate.interp1d(self.allPnts[idx], self.Evals[i, idx], kind=interpKind, fill_value='extrapolate')(self.allPnts)
-        print("Done", flush=True)
-    
+        print("Done\n", flush=True)
+
+    def interpolateDerivatives(self, diff, sN):
+        """
+        Interpolate the derivatives using the given stencil
+        @param diff: derivatives
+        @param sN: stencil size
+        @return: interpolated derivatives
+        """
+
+        # interpolate the derivatives
+        diff_shape = diff.shape
+        flat_diff = diff.flatten()
+
+        # get the indices of non-missing values
+        idx = np.where(np.isfinite(flat_diff))[0]
+
+        # interpolate the missing values over points
+        flat_diff = interpolate.interp1d(idx, flat_diff[idx], kind='previous', fill_value='extrapolate')(np.arange(flat_diff.size))
+
+        return flat_diff.reshape(diff_shape)
     
     def moveMissing(self):
         """Move missing values at each point to the last states"""
@@ -816,7 +845,10 @@ class SuaveStateScanner:
                 continue
 
             splitLine = line.split("=") # split the line into the parameter and the value
-
+            if len(splitLine) != 2: # skip lines that don't have a parameter and a value
+                continue
+            if "#" in splitLine[1]: # remove comments from the value
+                splitLine[1] = splitLine[1].split("#")[0]
 
             if "printVar" in splitLine[0]:
                 try:
@@ -998,7 +1030,7 @@ class SuaveStateScanner:
 
         return Evals, Pvals, allPnts
 
-    
+
 
 
 if __name__ == "__main__":

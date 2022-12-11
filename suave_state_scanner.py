@@ -188,6 +188,7 @@ class SuaveStateScanner:
         self.getMetric = getMetric
 
         self.hasMissing = False # flag for presence of missing data
+        self.stateMap = None # map of states to their indices
 
         ### Default configuration values
         self.printVar = 0 # index for energy or property to print
@@ -344,8 +345,8 @@ class SuaveStateScanner:
 
         if self.hasMissing and not self.interpolate:
             # set nan/inf values to mean value (not sure if this is the best way to handle this)
-            maxVal = np.nanmax(diff)
-            diff[np.isnan(diff) | np.isinf(diff)] = maxVal
+            # maxVal = np.nanmax(diff)
+            diff[np.isnan(diff) | np.isinf(diff)] = 1e5 # for now, set to large value
         return mergediff(diff)
 
 
@@ -407,9 +408,9 @@ class SuaveStateScanner:
             lastPvals = copy.deepcopy(self.Pvals)
 
             # create map of current state to last state for each point
-            stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
+            self.stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
             for pnt in range(self.numPoints):
-                stateMap[:, pnt] = np.arange(self.numStates)
+                self.stateMap[:, pnt] = np.arange(self.numStates)
 
             if self.interpolate:
                 # save copy of Evals and Pvals with interpolated missing values (if any)
@@ -425,6 +426,8 @@ class SuaveStateScanner:
             self.Evals = copy.deepcopy(lastEvals)
             self.Pvals = copy.deepcopy(lastPvals)
 
+            # self.sortEnergies() # sort energies and properties
+
 
             for state in range(self.numStates):
                 # skip state if out of bounds
@@ -432,9 +435,11 @@ class SuaveStateScanner:
                     continue
 
                 # interpolate missing values (if any); only for reordering
-                if self.interpolate:
-                    if self.hasMissing:
+                if self.hasMissing:
+                    if self.interpolate:
                         self.interpMissing() # use linear interpolation
+                    else:
+                        self.moveMissing() # move missing values to end of array
 
                 # save initial state info
                 stateEvals = copy.deepcopy(self.Evals)
@@ -452,11 +457,11 @@ class SuaveStateScanner:
                         stateRepeatList[state] = abs(self.maxStateRepeat - 2)
 
                 # reorder states across points for current state moving forwards
-                modifiedStates = self.sweepPoints(stateMap, minh, state, sweep)
+                modifiedStates = self.sweepPoints(minh, state, sweep)
 
                 if self.sweepBack:
                     # reorder states across points for current state moving backwards
-                    backModifiedStates = self.sweepPoints(stateMap, minh, state, sweep, backwards=True)
+                    backModifiedStates = self.sweepPoints(minh, state, sweep, backwards=True)
 
                     # merge modified states from forward and backward sweeps
                     for modstates in backModifiedStates:
@@ -480,9 +485,9 @@ class SuaveStateScanner:
             self.Evals = copy.deepcopy(lastEvals)
             self.Pvals = copy.deepcopy(lastPvals)
 
-            # use stateMap to reorder states
+            # use self.stateMap to reorder states
             for pnt in range(self.numPoints):
-                statesToSwap = stateMap[:, pnt].tolist()
+                statesToSwap = self.stateMap[:, pnt].tolist()
                 self.Evals[:, pnt] = self.Evals[statesToSwap, pnt]
                 self.Pvals[:, pnt] = self.Pvals[statesToSwap, pnt]
 
@@ -518,19 +523,12 @@ class SuaveStateScanner:
         print("Output file created:", self.outfile, flush=True)
 
 
-    def sweepPoints(self, stateMap, minh, state, sweep, backwards=False):
+    def sweepPoints(self, minh, state, sweep, backwards=False):
         """
         Sweep through points and sort states based on continuity of energy and amplitude norms
-        :param Evals: array of energies
-        :param Pvals: array of amplitude norms
-        :param stateMap: map of current state to last state for each point
-        :param allPnts: list of all points
         :param minh: minimum energy difference
         :param state: current state
         :param sweep: current sweep
-        :param numPoints: number of points
-        :param numStates: number of states
-        :param configVars: list of configuration variables
         :param backwards: if True, sweep backwards
         :return: List of states that were modified
         """
@@ -647,8 +645,8 @@ class SuaveStateScanner:
                     self.Evals[[state, newState], pnt] = self.Evals[[newState, state], pnt]
                     self.Pvals[[state, newState], pnt] = self.Pvals[[newState, state], pnt]
 
-                    # update stateMap
-                    stateMap[[state, newState], pnt] = stateMap[[newState, state], pnt]
+                    # update self.stateMap
+                    self.stateMap[[state, newState], pnt] = self.stateMap[[newState, state], pnt]
 
                     # update modifiedStates
                     if newState not in modifiedStates:
@@ -701,7 +699,26 @@ class SuaveStateScanner:
             # interpolate the missing values over points
             self.Evals[i, :] = interpolate.interp1d(self.allPnts[idx], self.Evals[i, idx], kind=interpKind, fill_value='extrapolate')(self.allPnts)
         print("Done", flush=True)
-
+    
+    
+    def moveMissing(self):
+        """Move missing values at each point to the last states"""
+        print("\nMoving missing values to the end of the array...", end=" ", flush=True)
+        for pnt in range(self.numPoints):
+            # get the indices of missing values
+            idx = np.where(~np.isfinite(self.Evals[:, pnt]))[0]
+            
+            count = 0 
+            for i in idx: # loop over missing states
+                # move missing values to the end of the array at each point and update stateMap
+                end = self.numStates - 1 - count
+                self.Evals[[i, end], pnt] = self.Evals[[end, i], pnt]
+                self.Pvals[[i, end], pnt] = self.Pvals[[end, i], pnt]
+                self.stateMap[[i, end], pnt] = self.stateMap[[end, i], pnt]
+                count += 1
+            
+            
+    
 
     # This function will randomize the state ordering for each point
     def shuffle_energy(self):
@@ -729,21 +746,15 @@ class SuaveStateScanner:
 
         Ecurves = genfromtxt('Evals.csv')
         Ncurves = genfromtxt('Pvals.csv')
-        allPnts = genfromtxt('allPnts.csv')
 
-        Evals = Ecurves.reshape((numStates, numPoints))
-        Pvals = Ncurves.reshape((numStates, numPoints, numColumns))
-
-        return Evals, Pvals, allPnts
+        self.allPnts = genfromtxt('allPnts.csv')
+        self.Evals = Ecurves.reshape((numStates, numPoints))
+        self.Pvals = Ncurves.reshape((numStates, numPoints, numColumns))
 
 
     def saveOrder(self, isFinalResults = False):
         """
         @brief This function will save the state information of a reorder scan for a future run of this script
-        @param Evals: The energy values for the current order
-        @param Pvals: The properties for the current order
-        @param allPnts: The points that are being evaluated
-        @param printVar: The index that determines which state information is saved
         @param isFinalResults: A boolean that determines if the final results are being saved
 
         @return: The energy and properties for each state at each point written to a file "tempInput.csv"
@@ -982,6 +993,8 @@ class SuaveStateScanner:
                              "in the input file (excluding the reaction coordinate).")
 
         return Evals, Pvals, allPnts
+
+    
 
 
 if __name__ == "__main__":

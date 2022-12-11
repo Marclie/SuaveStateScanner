@@ -337,8 +337,8 @@ class SuaveStateScanner:
 
         if self.hasMissing and not self.interpolate:
             # set nan/inf values to mean value (not sure if this is the best way to handle this)
-            meanVal = np.nanmean(diff)
-            diff[np.isnan(diff) | np.isinf(diff)] = meanVal
+            maxVal = np.nanmax(diff)
+            diff[np.isnan(diff) | np.isinf(diff)] = maxVal
         return mergediff(diff)
 
 

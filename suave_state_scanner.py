@@ -345,8 +345,8 @@ class SuaveStateScanner:
 
         if self.hasMissing and not self.interpolate:
             # set nan/inf values to mean value (not sure if this is the best way to handle this)
-            # maxVal = np.nanmax(diff)
-            diff[np.isnan(diff) | np.isinf(diff)] = 1e5 # for now, set to large value
+            meanVal = np.nanmean(diff)
+            diff[np.isnan(diff) | np.isinf(diff)] = meanVal # for now, set to large value
         return mergediff(diff)
 
 
@@ -407,11 +407,6 @@ class SuaveStateScanner:
             lastEvals = copy.deepcopy(self.Evals)
             lastPvals = copy.deepcopy(self.Pvals)
 
-            # create map of current state to last state for each point
-            self.stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
-            for pnt in range(self.numPoints):
-                self.stateMap[:, pnt] = np.arange(self.numStates)
-
             if self.interpolate:
                 # save copy of Evals and Pvals with interpolated missing values (if any)
                 if self.hasMissing and self.keepInterp:
@@ -426,7 +421,15 @@ class SuaveStateScanner:
             self.Evals = copy.deepcopy(lastEvals)
             self.Pvals = copy.deepcopy(lastPvals)
 
-            # self.sortEnergies() # sort energies and properties
+            self.sortEnergies() # sort energies and properties
+
+            # create map of current state to last state for each point
+            self.stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
+            for pnt in range(self.numPoints):
+                self.stateMap[:, pnt] = np.arange(self.numStates)
+
+            if self.hasMissing:
+                self.moveMissing()  # move missing values to end of array
 
 
             for state in range(self.numStates):
@@ -438,8 +441,7 @@ class SuaveStateScanner:
                 if self.hasMissing:
                     if self.interpolate:
                         self.interpMissing() # use linear interpolation
-                    else:
-                        self.moveMissing() # move missing values to end of array
+
 
                 # save initial state info
                 stateEvals = copy.deepcopy(self.Evals)
@@ -716,6 +718,8 @@ class SuaveStateScanner:
                 self.Pvals[[i, end], pnt] = self.Pvals[[end, i], pnt]
                 self.stateMap[[i, end], pnt] = self.stateMap[[end, i], pnt]
                 count += 1
+
+        print("Done\n", flush=True)
             
             
     

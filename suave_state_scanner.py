@@ -113,6 +113,35 @@ def mergediff(diff):
     return np.absolute(diff.sum(axis=1))
 
 
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
+def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWidth, hasMissing):
+    """
+    @brief This function will build the valid array for the current point
+    @param validArray: The array of valid states
+    @param Evals: The energy values for the current order
+    @param lobound: The lower bound for the current point
+    @param pnt: The current point
+    @param ref: The reference point
+    @param upbound: The upper bound for the current point
+    @param eBounds: The energy bounds for the current point
+    @param eWidth: The energy width for the current point
+    @param hasMissing: The array of missing states
+    @return: The valid array for the current point
+    """
+    # set all states at points that are not valid to False
+    for state in prange(lobound, upbound):
+        if eBounds is not None:
+            if not (eBounds[0] <= Evals[state, pnt] <= eBounds[1]):
+                validArray[state] = False
+        if eWidth is not None:
+            if eWidth < abs(Evals[ref, pnt] - Evals[state, pnt]):
+                validArray[state] = False
+        if hasMissing:  # only check for missing energies
+            Eval_missing = not np.isfinite(Evals[state, pnt])
+            if Eval_missing:
+                validArray[state] = False
+    return validArray
+
 def stringToList(string):
     """
     this function will convert a string to a list of integers
@@ -306,8 +335,10 @@ class SuaveStateScanner:
         # compute combined finite differences from all stencils considered in panning window
         approxDeriv(F, diff, center, stencil, alphas, sN)
 
-        # set nan/inf values to zero
-        diff[np.isnan(diff) | np.isinf(diff)] = 0
+        if self.hasMissing and not self.interpolate:
+            # set nan/inf values to mean value (not sure if this is the best way to handle this)
+            meanVal = np.nanmean(diff)
+            diff[np.isnan(diff) | np.isinf(diff)] = meanVal
         return mergediff(diff)
 
 
@@ -352,18 +383,19 @@ class SuaveStateScanner:
         print("\n\n", flush=True)
         time.sleep(1)
 
+        # sort energies and properties
+        self.sortEnergies()
 
         # arrange states such that energy and amplitude norms are continuous
         delMax = np.inf # initialize delMax to infinity
-        converged = False
-        sweep = 0
-        while not converged and sweep < self.maxiter:
+        converged = False # initialize convergence flag to false
+        sweep = 0 # initialize sweep counter
+        while not converged and sweep < self.maxiter: # iterate until convergence or max iterations reached
             sweep += 1
 
             startSweeptime = time.time()
 
             # copy initial state info
-            self.sortEnergies()
             lastEvals = copy.deepcopy(self.Evals)
             lastPvals = copy.deepcopy(self.Pvals)
 
@@ -376,18 +408,23 @@ class SuaveStateScanner:
                 # save copy of Evals and Pvals with interpolated missing values (if any)
                 if self.hasMissing and self.keepInterp:
                     self.interpMissing(interpKind="cubic") # interpolate missing values with cubic spline
+                self.sortEnergies()
                 self.saveOrder()
-                self.Evals = copy.deepcopy(lastEvals)
-                self.Pvals = copy.deepcopy(lastPvals)
             else:
+                self.sortEnergies() # only sort energies and properties when saving order
                 self.saveOrder()
+
+            # reset Evals and Pvals to original order
+            self.Evals = copy.deepcopy(lastEvals)
+            self.Pvals = copy.deepcopy(lastPvals)
+
 
             for state in range(self.numStates):
                 # skip state if out of bounds
                 if not (self.stateBounds[0] <= state <= self.stateBounds[1]):
                     continue
 
-                # interpolate missing values (if any) only for reordering
+                # interpolate missing values (if any); only for reordering
                 if self.interpolate:
                     if self.hasMissing:
                         self.interpMissing() # use linear interpolation
@@ -438,8 +475,9 @@ class SuaveStateScanner:
 
             # use stateMap to reorder states
             for pnt in range(self.numPoints):
-                self.Evals[:, pnt] = self.Evals[stateMap[:, pnt], pnt]
-                self.Pvals[:, pnt] = self.Pvals[stateMap[:, pnt], pnt]
+                statesToSwap = stateMap[:, pnt].tolist()
+                self.Evals[:, pnt] = self.Evals[statesToSwap, pnt]
+                self.Pvals[:, pnt] = self.Pvals[statesToSwap, pnt]
 
             # check if states have converged
             delEval = self.Evals - lastEvals
@@ -464,11 +502,11 @@ class SuaveStateScanner:
             # save copy of Evals and Pvals with interpolated missing values (if any)
             if self.hasMissing and self.keepInterp:
                 self.interpMissing(interpKind="cubic") # interpolate missing values with cubic spline
-        self.sortEnergies()
 
         endArrange = time.time()
         print("\n\nTotal time to arrange states:", endArrange - startArrange, flush=True)
 
+        self.sortEnergies()
         self.saveOrder(isFinalResults=True)
         print("Output file created:", self.outfile, flush=True)
 
@@ -532,21 +570,17 @@ class SuaveStateScanner:
                 lobound = self.stateBounds[0]
                 upbound = self.stateBounds[1]
 
-            validStates, thisValid = self.findValidStates(lobound, pnt, state, upbound)
-
-            if not thisValid:
-                # if the current state is not valid, skip it
-                print("state", state, "is not valid at point", pnt, flush=True)
-                continue
-
-            if len(validStates) == 0:
-                # if no states are valid, skip this point
-                print("No valid states found for point", pnt, flush=True)
-                continue
-
             swapStart = state + 1 # start swapping states at the next state
             if self.redundantSwaps: # if redundant swaps are allowed, start swapping states at the first state
                 swapStart = 0
+
+            validStates = self.findValidStates(lobound, pnt, state, upbound)
+
+            if state not in validStates: # if current state is not valid, skip it
+                continue
+
+            if not np.isfinite(self.Evals[state, pnt]): # if current state is missing, skip it
+                continue
 
             # Bubble Sort algorithm to rearrange states
             while repeat <= repeatMax and itr < maxiter:
@@ -565,26 +599,34 @@ class SuaveStateScanner:
                 # loop through all states to find the best swap
                 for i in range(swapStart, self.numStates): # point is allowed to swap with states outside of bounds
 
-                    if i not in validStates:
+                    if i not in validStates: # skip states that are not valid
                         continue
 
+                    if not np.isfinite(self.Evals[i, pnt]):  # if state is missing, skip it
+                        # this shouldn't happen since validStates should not include missing states
+                        continue
+
+                    # swap states
                     self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
                     self.Pvals[[state, i], pnt] = self.Pvals[[i, state], pnt]
 
-                    # nth order finite difference
+                    # nth order finite difference from swapped states
                     diffE = self.generateDerivatives(pnt, self.Evals[validStates], minh, backwards=backwards)
                     diffP = self.generateDerivatives(pnt, self.Pvals[validStates], minh, backwards=backwards)
 
+                    # swap back
+                    self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
+                    self.Pvals[[state, i], pnt] = self.Pvals[[i, state], pnt]
+
+                    # if derivatives are missing, skip this state
                     if diffE.size == 0 or diffP.size == 0:
                         continue
 
+                    # get metric of continuity difference
                     diff = self.getMetric(diffE, diffP)
 
-                    if diff < minDif[0]:
+                    if diff < minDif[0]: # if this state is better than the current best, update the best
                         minDif = (diff, i)
-
-                    self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
-                    self.Pvals[[state, i], pnt] = self.Pvals[[i, state], pnt]
 
                 if lastDif[1] == minDif[1]:
                     repeat += 1
@@ -621,36 +663,17 @@ class SuaveStateScanner:
         @param pnt: current point
         @param ref: current state
         @param upbound: upper bound for states
-        @return (validStates, thisValid) : (list of valid states, True if current state is valid)
+        @return validStates : list of valid states
         """
-
-        validArray = np.ones(self.numStates, dtype=bool)
-        validArray.fill(True) # set all states to be valid
-
-        # set all states at points that are not valid to False
-        thisValid = True
-        for state in range(self.numStates):
-            if self.eBounds is not None:
-                if not(self.eBounds[0] <= self.Evals[state, pnt] <= self.eBounds[1]):
-                    validArray[state] = False
-            if self.eWidth is not None:
-                if self.eWidth < abs(self.Evals[ref, pnt] - self.Evals[state, pnt]):
-                    validArray[state] = False
-            if self.hasMissing: # only check for missing energies
-                Eval_missing = not np.isfinite(self.Evals[state, pnt])
-                if Eval_missing:
-                    validArray[state] = False
-            if not validArray[ref]:
-                thisValid = False
-                break
-
-        if not thisValid:
-            # if the current state is not valid, skip it
-            return [], False
+        validArray = np.zeros(self.numStates, dtype=bool)
+        validArray.fill(True)  # set all states to be valid
+        validArray = buildValidArray(validArray, self.Evals, lobound, pnt, ref, upbound, self.eBounds, self.eWidth, self.hasMissing)
 
         # convert validArray to list of valid states
         validStates = np.where(validArray)[0].tolist()
-        return validStates, thisValid # return list of valid states at each point
+        validStates.sort()
+
+        return validStates # return sorted list of valid states at each point
 
     def interpMissing(self, interpKind = 'linear'):
         """Interpolate missing values in Evals and Pvals"""

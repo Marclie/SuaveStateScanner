@@ -128,12 +128,19 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWid
     @param hasMissing: The array of missing states
     @return: The valid array for the current point
     """
+
+    hasEBounds = eBounds is not None # check if energy bounds are provided
+    hasEWidth = eWidth is not None # check if energy width is provided
+
+    if not (hasEBounds or hasEWidth or hasMissing):
+        return validArray # if no bounds or missing states, all states are valid
+
     # set all states at points that are not valid to False
     for state in prange(lobound, upbound):
-        if eBounds is not None:
+        if hasEBounds:
             if not (eBounds[0] <= Evals[state, pnt] <= eBounds[1]):
                 validArray[state] = False
-        if eWidth is not None:
+        if hasEWidth:
             if eWidth < abs(Evals[ref, pnt] - Evals[state, pnt]):
                 validArray[state] = False
         if hasMissing:  # only check for missing energies
@@ -667,11 +674,13 @@ class SuaveStateScanner:
         """
         validArray = np.zeros(self.numStates, dtype=bool)
         validArray.fill(True)  # set all states to be valid
+
+        # set states outside of bounds or missing to be invalid
         validArray = buildValidArray(validArray, self.Evals, lobound, pnt, ref, upbound, self.eBounds, self.eWidth, self.hasMissing)
 
         # convert validArray to list of valid states
         validStates = np.where(validArray)[0].tolist()
-        validStates.sort()
+        validStates.sort() # sort states in ascending order
 
         return validStates # return sorted list of valid states at each point
 

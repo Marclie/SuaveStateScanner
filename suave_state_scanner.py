@@ -437,8 +437,8 @@ class SuaveStateScanner:
             for pnt in range(self.numPoints):
                 self.stateMap[:, pnt] = np.arange(self.numStates)
 
-            if self.hasMissing and not self.interpolate:
-                self.moveMissing()  # move missing values to end of array
+            # if self.hasMissing and not self.interpolate:
+            #     self.moveMissing()  # move missing values to end of array
 
 
             for state in range(self.numStates):

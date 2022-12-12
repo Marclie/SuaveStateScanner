@@ -130,6 +130,12 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWid
     @return: The valid array for the current point
     """
 
+    # set all states less than lower bound and greater than upper bound to False
+    if not fullRange:
+        for state in prange(0, Evals.shape[0]):
+            if state < lobound or state >= upbound:
+                validArray[state] = False
+
     # set all states at points that are not valid to False
     for state in prange(lobound, upbound):
         if hasEBounds:
@@ -139,12 +145,7 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWid
             if eWidth < abs(Evals[ref, pnt] - Evals[state, pnt]):
                 validArray[state] = False
 
-    # set all states less than lower bound and greater than upper bound to False
-    if not fullRange:
-        for state in prange(lobound):
-            validArray[state] = False
-        for state in prange(upbound, Evals.shape[0]):
-            validArray[state] = False
+
 
     return validArray
 

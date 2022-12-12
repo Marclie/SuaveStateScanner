@@ -228,17 +228,19 @@ class SuaveStateScanner:
         # parse the input file to get the energies and properties for each state at each point
         self.Evals, self.Pvals, self.allPnts, self.minh = self.parseInputFile()
 
-        if self.doShuffle: # shuffle the points before reordering
-            self.shuffle_energy()
-        self.sortEnergies() # sort the states by energy of the first point
-
-        self.numPoints = len(self.allPnts) # number of points
-        self.numProps = self.Pvals.shape[2] # number of properties
-
         if self.pntBounds is None:
             self.pntBounds = [0, len(self.allPnts)]
         if self.stateBounds is None:
             self.stateBounds = [0, self.numStates]
+
+        self.numPoints = len(self.allPnts)  # number of points
+        self.numProps = self.Pvals.shape[2]  # number of properties
+
+        if self.doShuffle: # shuffle the points before reordering
+            self.shuffle_energy()
+        self.sortEnergies() # sort the states by energy of the first point
+
+
 
         # print out all the configuration values
         print("\n\n\tConfiguration Parameters:\n", flush=True)

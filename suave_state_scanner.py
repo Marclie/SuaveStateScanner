@@ -200,6 +200,7 @@ class SuaveStateScanner:
         self.stateBounds = None # bounds for states to use
         self.pntBounds = None # bounds for points to use
         self.propBounds = None # bounds for properties to use
+        self.ignoreProps = False # flag for ignoring properties
         self.sweepBack = False # whether to sweep backwards across points after reordering forwards
         self.eBounds = None # bounds for energies to use
         self.eWidth = None # width for valid energies to swap with current state at a point
@@ -234,13 +235,13 @@ class SuaveStateScanner:
             self.propBounds = [0, self.numProps]
 
         # check input for bounds. Throw error if bounds are invalid
-        if self.pntBounds[0] >= self.pntBounds[1]:
+        if self.pntBounds[0] >= self.pntBounds[1] - 1:
             raise ValueError("Invalid point bounds")
-        if self.stateBounds[0] >= self.stateBounds[1]:
+        if self.stateBounds[0] >= self.stateBounds[1] - 1:
             raise ValueError("Invalid state bounds")
-        if self.propBounds[0] >= self.propBounds[1]:
+        if self.propBounds[0] >= self.propBounds[1] - 1:
             raise ValueError("Invalid property bounds")
-        if self.eBounds is not None and self.eBounds[0] >= self.eBounds[1]:
+        if self.eBounds is not None and self.eBounds[0] >= self.eBounds[1] - 1:
             raise ValueError("Invalid energy bounds")
         if self.eWidth is not None and self.eWidth <= 0:
             raise ValueError("Invalid energy width")
@@ -555,13 +556,19 @@ class SuaveStateScanner:
             if state not in validStates: # if current state is not valid, skip it
                 continue
 
+            if ~np.isfinite(self.Evals[state, pnt]): # if current state is missing, skip it
+                continue
+
             # Bubble Sort algorithm to rearrange states
             while repeat <= repeatMax and itr < maxiter:
 
                 # nth order finite difference
                 # compare continuity differences from this state swapped with all other states
                 diffE = self.generateDerivatives(pnt, self.Evals[validStates], backwards=backwards)
-                diffP = self.generateDerivatives(pnt, self.Pvals[validStates, :, propStart:propEnd], backwards=backwards)
+                if not self.ignoreProps:
+                    diffP = self.generateDerivatives(pnt, self.Pvals[validStates, :, propStart:propEnd], backwards=backwards)
+                else:
+                    diffP = np.ones_like(self.Pvals[validStates, :, 0])
 
                 if diffE.size == 0 or diffP.size == 0:
                     continue
@@ -574,6 +581,10 @@ class SuaveStateScanner:
 
                     if i not in validStates: # skip states that are not valid
                         continue
+                    if i == state: # skip current state
+                        continue
+                    if ~np.isfinite(self.Evals[i, pnt]): # skip missing states
+                        continue
 
                     # swap states
                     self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
@@ -581,7 +592,11 @@ class SuaveStateScanner:
 
                     # nth order finite difference from swapped states
                     diffE = self.generateDerivatives(pnt, self.Evals[validStates], backwards=backwards)
-                    diffP = self.generateDerivatives(pnt, self.Pvals[validStates, :, propStart:propEnd], backwards=backwards)
+                    if not self.ignoreProps:
+                        diffP = self.generateDerivatives(pnt, self.Pvals[validStates, :, propStart:propEnd],
+                                                         backwards=backwards)
+                    else:
+                        diffP = np.ones_like(self.Pvals[validStates, :, 0])
 
                     # swap back
                     self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
@@ -1292,6 +1307,7 @@ class SuaveStateScanner:
             self.pntBounds = point_bounds
             self.stateBounds = state_bounds
             self.propBounds = prop_bounds
+            self.ignoreProps = False
             self.energyBounds = energy_bounds
             self.printVar = int(print_var)
             self.width = int(stencil_width)
@@ -1336,15 +1352,17 @@ class SuaveStateScanner:
                 self.width = self.numPoints - 1
                 print("Stencil width too large. Using minimum stencil width instead.", flush=True)
 
-            if self.pntBounds[0] == self.pntBounds[1]:
+            if self.pntBounds[0] >= self.pntBounds[1] - 1:
                 self.pntBounds[1] = self.pntBounds[0] + 1
                 print("Point bounds too small. Using minimum point bounds instead.", flush=True)
-            if self.stateBounds[0] == self.stateBounds[1]:
+            if self.stateBounds[0] >= self.stateBounds[1] - 1:
                 self.stateBounds[1] = self.stateBounds[0] + 1
                 print("State bounds too small. Using minimum state bounds instead.", flush=True)
-            if self.propBounds[0] == self.propBounds[1]:
-                self.propBounds[1] = self.propBounds[0] + 1
-                print("Property bounds too small. Using minimum property bounds instead.", flush=True)
+            if self.propBounds[0] >= self.propBounds[1] - 1:
+                if self.propBounds[0] == 0 and self.propBounds[1] == 0:
+                    self.ignoreProps = True
+                else:
+                    print("Property bounds too small. Using minimum property bounds instead.", flush=True)
             if abs(self.energyBounds[1] - self.energyBounds[0]) <= 1e-6:
                 self.energyBounds[1] = self.energyBounds[0] + 1e-6
                 print("Energy bounds too small. Using minimum energy bounds instead.", flush=True)

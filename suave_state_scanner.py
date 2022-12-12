@@ -145,10 +145,6 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWid
         if hasEWidth:
             if eWidth < abs(Evals[ref, pnt] - Evals[state, pnt]):
                 validArray[state] = False
-        if hasMissing:  # only check for missing energies
-            Eval_missing = not np.isfinite(Evals[state, pnt])
-            if Eval_missing:
-                validArray[state] = False
 
     # set all states less than lower bound and greater than upper bound to False
     if not fullRange:
@@ -571,10 +567,6 @@ class SuaveStateScanner:
                 for i in range(swapStart, self.numStates): # point is allowed to swap with states outside of bounds
 
                     if i not in validStates: # skip states that are not valid
-                        continue
-
-                    if not np.isfinite(self.Evals[i, pnt]):  # if state is missing, skip it
-                        # this shouldn't happen since validStates should not include missing states
                         continue
 
                     # swap states

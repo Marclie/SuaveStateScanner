@@ -1073,6 +1073,7 @@ class SuaveStateScanner:
         """
 
         from dash import Dash, dcc, html, Input, Output, no_update
+        from dash.exceptions import PreventUpdate
         import plotly.graph_objects as go
 
         app = Dash(__name__)
@@ -1247,6 +1248,7 @@ class SuaveStateScanner:
         last_sweep_click = 0
         last_shuffle_click = 0
         last_redraw_click = 0
+        callback_running = False
         @app.callback(
             [Output('graph', 'figure'), Output('loading-reorder-out', 'children')],
             [Input('button', 'n_clicks'), Input('point-slider', 'value'), Input('state-slider', 'value'),
@@ -1277,7 +1279,15 @@ class SuaveStateScanner:
             @param energy_bounds:  the bounds of the energies to be plotted
             @return: the figure to be plotted
             """
-            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, sweep
+            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, sweep, callback_running
+
+            if callback_running:
+                last_sweep_click = sweep_clicks
+                last_shuffle_click = shuffle_clicks
+                last_redraw_click = redraw_clicks
+                raise PreventUpdate
+
+            callback_running = True
 
             self.pntBounds = point_bounds
             self.stateBounds = state_bounds
@@ -1294,14 +1304,19 @@ class SuaveStateScanner:
             # check which button was clicked
             if redraw_clicks > last_redraw_click:
                 last_redraw_click = redraw_clicks
-                return make_figure()[0], "Redrawn"
+                ret = make_figure()[0], "Redrawn"
+                callback_running = False
+                return ret
             elif sweep_clicks > last_sweep_click and sweep_clicks > 0:
                 last_sweep_click = sweep_clicks
             elif shuffle_clicks > last_shuffle_click:
                 last_shuffle_click = shuffle_clicks
                 self.shuffle_energy()
-                return make_figure()[0], "Shuffled"
+                ret = make_figure()[0], "Shuffled"
+                callback_running = False
+                return ret
             else:
+                callback_running = False
                 return no_update, no_update
 
             # check input
@@ -1330,7 +1345,7 @@ class SuaveStateScanner:
             if self.propBounds[0] == self.propBounds[1]:
                 self.propBounds[1] = self.propBounds[0] + 1
                 print("Property bounds too small. Using minimum property bounds instead.", flush=True)
-            if abs(self.energyBounds[0] - self.energyBounds[1]) <= 1e-6:
+            if abs(self.energyBounds[1] - self.energyBounds[0]) <= 1e-6:
                 self.energyBounds[1] = self.energyBounds[0] + 1e-6
                 print("Energy bounds too small. Using minimum energy bounds instead.", flush=True)
 
@@ -1354,19 +1369,27 @@ class SuaveStateScanner:
                 self.sortEnergies()
 
             # update plot data
-            return make_figure()
+            ret = make_figure()
+            callback_running = False
+            return ret
 
-
+        last_save_clicks = 0
         @app.callback(
             Output('loading-save-out', 'children'),
             [Input('save-button', 'n_clicks')])
-        def save_order(n_clicks):
+        def save_order(save_clicks):
             """
             This function saves the order
-            @param n_clicks:  the number of times the button has been clicked
+            @param save_clicks:  the number of times the button has been clicked
             @return: the bounds of the points to be plotted
             """
-            if n_clicks > 0:
+            nonlocal last_save_clicks, callback_running
+            if callback_running:
+                last_save_clicks = save_clicks
+                raise PreventUpdate
+            callback_running = True
+
+            if save_clicks > 0:
                 lastEvals = copy.deepcopy(self.Evals)
                 lastPvals = copy.deepcopy(self.Pvals)
 
@@ -1377,7 +1400,11 @@ class SuaveStateScanner:
 
                 self.Evals = copy.deepcopy(lastEvals)
                 self.Pvals = copy.deepcopy(lastPvals)
+                callback_running = False
                 return "Order saved"
+            else:
+                callback_running = False
+                return no_update
 
         # run app without verbose output
         app.run_server(debug=False, use_reloader=False)

@@ -555,9 +555,6 @@ class SuaveStateScanner:
             if state not in validStates: # if current state is not valid, skip it
                 continue
 
-            if not np.isfinite(self.Evals[state, pnt]): # if current state is missing, skip it
-                continue
-
             # Bubble Sort algorithm to rearrange states
             while repeat <= repeatMax and itr < maxiter:
 
@@ -1179,7 +1176,7 @@ class SuaveStateScanner:
 
                 html.Div([  # create a div for checklist redundant swaps
                     dcc.Checklist(id='redundant', options=[{'label': 'Redundant Swaps', 'value': 'redundant'}],
-                                  value=False),
+                                  value=True),
                 ], style={'display': 'inline-block', 'width': '33%'}),
 
 
@@ -1333,7 +1330,7 @@ class SuaveStateScanner:
             if self.propBounds[0] == self.propBounds[1]:
                 self.propBounds[1] = self.propBounds[0] + 1
                 print("Property bounds too small. Using minimum property bounds instead.", flush=True)
-            if self.energyBounds[0] - self.energyBounds[1] <= 1e-6:
+            if abs(self.energyBounds[0] - self.energyBounds[1]) <= 1e-6:
                 self.energyBounds[1] = self.energyBounds[0] + 1e-6
                 print("Energy bounds too small. Using minimum energy bounds instead.", flush=True)
 

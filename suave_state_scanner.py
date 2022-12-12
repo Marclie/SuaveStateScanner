@@ -114,7 +114,7 @@ def mergediff(diff):
 
 
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
-def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWidth, hasMissing, hasInterp):
+def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWidth, hasEBounds, hasEWidth, fullRange):
     """
     @brief This function will build the valid array for the current point
     @param validArray: The array of valid states
@@ -129,13 +129,6 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWid
     @param hasInterp: The flag for if interpolation is being used
     @return: The valid array for the current point
     """
-
-    hasEBounds = eBounds is not None # check if energy bounds are provided
-    hasEWidth = eWidth is not None # check if energy width is provided
-
-    fullRange = lobound == 0 and upbound == Evals.shape[0] # check if the full range is being used
-    if not (hasEBounds or hasEWidth or (hasMissing and not hasInterp) or fullRange):
-        return validArray # if no bounds or missing states, all states are valid
 
     # set all states at points that are not valid to False
     for state in prange(lobound, upbound):
@@ -633,9 +626,19 @@ class SuaveStateScanner:
         validArray = np.zeros(self.numStates, dtype=bool)
         validArray.fill(True)  # set all states to be valid
 
-        # set states outside of bounds or missing to be invalid
-        validArray = buildValidArray(validArray, self.Evals, lobound, pnt, ref, upbound,
-                                     self.eBounds, self.eWidth, self.hasMissing, self.interpolate)
+
+        hasEBounds = self.eBounds is not None # check if energy bounds are specified
+        eBounds = np.array(self.eBounds) # convert energy bounds to array
+        hasEWidth = self.eWidth is not None  # check if energy width is provided
+        fullRange = lobound == 0 and upbound == self.Evals.shape[0]  # check if the full range is being used
+
+        if not (hasEBounds or hasEWidth or fullRange):
+            # set states outside of bounds or missing to be invalid
+            validArray = buildValidArray(validArray, self.Evals, lobound, pnt, ref, upbound,
+                                         eBounds, self.eWidth, hasEBounds, hasEWidth, fullRange)
+        else:
+            pass # if no bounds or width are specified, all states are valid
+
 
         # convert validArray to list of valid states
         validStates = np.where(validArray)[0].tolist()

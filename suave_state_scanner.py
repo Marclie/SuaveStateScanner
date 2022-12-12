@@ -203,6 +203,7 @@ class SuaveStateScanner:
         ### Default configuration values
         self.printVar = 0 # index for energy or property to print
         self.maxiter = 1000 # maximum number of iterations
+        self.tol = 1e-12 # tolerance for convergence of energy/properties
         self.orders = [1] # orders of derivatives to use
         self.width = 5 # stencil width
         self.futurePnts = 0 # number of future points to use
@@ -220,6 +221,7 @@ class SuaveStateScanner:
         self.maxStateRepeat = -1 # maximum number of times to repeat swapping an unmodified state
         self.redundantSwaps = False # whether to allow redundant swaps of lower-lying states
 
+        self.interactive = False # whether to interactive the reordering
 
         # Parse the configuration file
         self.applyConfig()
@@ -228,13 +230,14 @@ class SuaveStateScanner:
         numba.set_num_threads(1 if self.nthreads is None else self.nthreads)
 
         # parse the input file to get the energies and properties for each state at each point
-        self.Evals, self.Pvals, self.allPnts = self.parseInputFile()
+        self.Evals, self.Pvals, self.allPnts, self.minh = self.parseInputFile()
 
         if self.doShuffle: # shuffle the points before reordering
             self.shuffle_energy()
         self.sortEnergies() # sort the states by energy of the first point
 
         self.numPoints = len(self.allPnts) # number of points
+        self.numProps = self.Pvals.shape[2] # number of properties
 
         if self.pntBounds is None:
             self.pntBounds = [0, len(self.allPnts)]
@@ -244,6 +247,7 @@ class SuaveStateScanner:
         # print out all the configuration values
         print("\n\n\tConfiguration Parameters:\n", flush=True)
         print("printVar", self.printVar, flush=True)
+        print("interactive", self.interactive, flush=True)
         print("maxiter", self.maxiter, flush=True)
         print("orders", self.orders, flush=True)
         print("width", self.width, flush=True)
@@ -263,12 +267,31 @@ class SuaveStateScanner:
         print("redundantSwaps", self.redundantSwaps, flush=True)
         print("", flush=True)
 
-    def generateDerivatives(self, center, F, minh, backwards=False):
+        # container to count unmodified states
+        self.stateRepeatList = np.zeros(self.numStates)
+
+        # check if any points are nan or inf
+        self.hasMissing = np.isnan(self.Evals).any() or np.isinf(self.Evals).any() or np.isnan(
+            self.Pvals).any() or np.isinf(self.Pvals).any()
+        if self.hasMissing:
+            print("\nWARNING: Energies or properties contain nan or inf values.")
+            if self.interpolate:
+                print("These will be ignored by interpolating over them during the optimization.")
+            else:
+                print("These will be ignored explicitly in the finite difference calculations.")
+            if self.keepInterp:
+                print("WARNING: final energies and properties will contain interpolated values.")
+            else:
+                print("Final results will not include these points.", flush=True)
+
+        print("\n", flush=True)
+        time.sleep(1)
+
+    def generateDerivatives(self, center, F, backwards=False):
         """
         @brief This function approximates the n-th order derivatives of the energies and properties at a point.
         @param center: The index of the center point
         @param F: the energies and properties of the state to be reordered and each state above it across each point
-        @param minh: the minimum step size to use in the finite difference approximationtion
         @param backwards: whether to approximate the derivatives backwards or forwards from the center
         @return: the n-th order finite differences of the energies and properties at the center point
         """
@@ -315,14 +338,14 @@ class SuaveStateScanner:
                 # scale stencil to potentially non-uniform mesh based off smallest point spacing
                 sh = zeros(sN)
                 for idx in range(sN):
-                    sh[idx] = (self.allPnts[center + s[idx]] - self.allPnts[center]) / minh
+                    sh[idx] = (self.allPnts[center + s[idx]] - self.allPnts[center]) / self.minh
                 sh.flags.writeable = False
 
                 # get finite difference coefficients from stencil points
                 alpha = makeStencil(sh, order)
 
                 # collect finite difference coefficients from this stencil
-                h_n = minh ** order
+                h_n = self.minh ** order
                 for idx in range(sN):
                     try:
                         combinedStencils[s[idx]] += alpha[idx] / h_n
@@ -367,177 +390,109 @@ class SuaveStateScanner:
         self.Evals[:] = self.Evals[idx]
         self.Pvals[:] = self.Pvals[idx]
 
-
-    def run(self):
+    def prepareSweep(self):
         """
-        @brief: This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
+        @brief: This function prepares the states for a sweep by saving the current state of the energies and properties
+                and creating a map of the states to their original order
+        @return: lastEvals, lastPvals: the energies and properties of the states in their original order
         """
-        startArrange = time.time() # start timer
 
-        # find the smallest step size
-        minh = np.inf
-        for idx in range(self.numPoints - 1):
-            h = self.allPnts[idx + 1] - self.allPnts[idx]
-            if h < minh:
-                minh = h
-
-        # containers to count unmodified states
-        stateRepeatList = np.zeros(self.numStates)
-
-        # check if any points are nan or inf
-        self.hasMissing = np.isnan(self.Evals).any() or np.isinf(self.Evals).any() or np.isnan(self.Pvals).any() or np.isinf(self.Pvals).any()
-        if self.hasMissing:
-            print("\nWARNING: Energies or properties contain nan or inf values.")
-            if self.interpolate:
-                print("These will be ignored by interpolating over them during the optimization.\n")
-            else:
-                print("These will be ignored explicitly in the finite difference calculations.\n")
-            if self.keepInterp:
-                print("WARNING: final energies and properties will contain interpolated values.\n")
-            else:
-                print("Final results will not include these points.", flush=True)
-
-        print("\n\n", flush=True)
-        time.sleep(1)
-
-        # sort energies and properties
-        self.sortEnergies()
-
-        # arrange states such that energy and amplitude norms are continuous
-        delMax = np.inf # initialize delMax to infinity
-        converged = False # initialize convergence flag to false
-        sweep = 0 # initialize sweep counter
-        while not converged and sweep < self.maxiter: # iterate until convergence or max iterations reached
-            sweep += 1
-
-            startSweeptime = time.time()
-
-            # copy initial state info
-            lastEvals = copy.deepcopy(self.Evals)
-            lastPvals = copy.deepcopy(self.Pvals)
-
-            if self.interpolate:
-                # save copy of Evals and Pvals with interpolated missing values (if any)
-                if self.hasMissing and self.keepInterp:
-                    self.interpMissing(interpKind="cubic") # interpolate missing values with cubic spline
-                self.sortEnergies()
-                self.saveOrder()
-            else:
-                self.sortEnergies() # only sort energies and properties when saving order
-                self.saveOrder()
-
-            # reset Evals and Pvals to original order
-            self.Evals = copy.deepcopy(lastEvals)
-            self.Pvals = copy.deepcopy(lastPvals)
-
-            self.sortEnergies() # sort energies and properties
-
-            # create map of current state to last state for each point
-            self.stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
-            for pnt in range(self.numPoints):
-                self.stateMap[:, pnt] = np.arange(self.numStates)
-
-            # if self.hasMissing and not self.interpolate:
-            #     self.moveMissing()  # move missing values to end of array
-
-
-            for state in range(self.numStates):
-                # skip state if out of bounds
-                if not (self.stateBounds[0] <= state <= self.stateBounds[1]):
-                    continue
-
-                # interpolate missing values (if any); only for reordering
-                if self.hasMissing:
-                    if self.interpolate:
-                        self.interpMissing() # use linear interpolation
-
-
-                # save initial state info
-                stateEvals = copy.deepcopy(self.Evals)
-                statePvals = copy.deepcopy(self.Pvals)
-
-                # check if state has been modified too many times without improvement
-                if stateRepeatList[state] >= self.maxStateRepeat > 0:
-                    stateRepeatList[state] += 1
-                    if stateRepeatList[state] < self.maxStateRepeat + 10:
-                        # if so, ignore it for 10 sweeps
-                        print("###", "Skipping", "###", flush=True)
-                        continue
-                    else:
-                        # if state has been ignored for too long, test it again twice
-                        stateRepeatList[state] = abs(self.maxStateRepeat - 2)
-
-                # reorder states across points for current state moving forwards
-                modifiedStates = self.sweepPoints(minh, state, sweep)
-
-                if self.sweepBack:
-                    # reorder states across points for current state moving backwards
-                    backModifiedStates = self.sweepPoints(minh, state, sweep, backwards=True)
-
-                    # merge modified states from forward and backward sweeps
-                    for modstates in backModifiedStates:
-                        if modstates not in modifiedStates:
-                            modifiedStates.append(modstates)
-
-                # check if state has been modified
-                delMax = stateDifference(self.Evals, self.Pvals, stateEvals, statePvals, state)
-                if delMax < 1e-12:
-                    stateRepeatList[state] += 1
-                else:
-                    stateRepeatList[state] = 0 # reset counter if state has been modified
-
-                # check if any other states have been modified
-                for modstate in modifiedStates:
-                    stateRepeatList[modstate] = 0 # reset counter for modified states
-
-            endSweeptime = time.time()
-
-            # reset states to original order with missing values
-            self.Evals = copy.deepcopy(lastEvals)
-            self.Pvals = copy.deepcopy(lastPvals)
-
-            # use self.stateMap to reorder states
-            for pnt in range(self.numPoints):
-                statesToSwap = self.stateMap[:, pnt].tolist()
-                self.Evals[:, pnt] = self.Evals[statesToSwap, pnt]
-                self.Pvals[:, pnt] = self.Pvals[statesToSwap, pnt]
-
-            # check if states have converged
-            delEval = self.Evals - lastEvals
-            delPval = self.Pvals - lastPvals
-
-            delEval = delEval[np.isfinite(delEval)]
-            delPval = delPval[np.isfinite(delPval)]
-
-            delMax = delEval.max() + delPval.max()
-            print("CONVERGENCE PROGRESS: {:e}".format(delMax), flush=True)
-            print("SWEEP TIME: {:e}".format(endSweeptime - startSweeptime), flush=True)
-            if delMax < 1e-12:
-                converged = True
-
-        if converged:
-            print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
-        else:
-            print("!!!!!!!!!!!!!!!!!!!! FAILED TO CONVERRGE !!!!!!!!!!!!!!!!!!!!", flush=True)
-
-        # create copy of Evals and Pvals with interpolated missing values (if any)
+        # copy initial state info
+        lastEvals = copy.deepcopy(self.Evals)
+        lastPvals = copy.deepcopy(self.Pvals)
         if self.interpolate:
             # save copy of Evals and Pvals with interpolated missing values (if any)
             if self.hasMissing and self.keepInterp:
-                self.interpMissing(interpKind="cubic") # interpolate missing values with cubic spline
+                self.interpMissing(interpKind="cubic")  # interpolate missing values with cubic spline
+            self.sortEnergies()
+            self.saveOrder()
+        else:
+            self.sortEnergies()  # only sort energies and properties when saving order
+            self.saveOrder()
+        # reset Evals and Pvals to original order
+        self.Evals = copy.deepcopy(lastEvals)
+        self.Pvals = copy.deepcopy(lastPvals)
+        self.sortEnergies()  # sort energies and properties
+        # create map of current state to last state for each point
+        self.stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
+        for pnt in range(self.numPoints):
+            self.stateMap[:, pnt] = np.arange(self.numStates)
+        return lastEvals, lastPvals
 
-        endArrange = time.time()
-        print("\n\nTotal time to arrange states:", endArrange - startArrange, flush=True)
+    def analyzeSweep(self, lastEvals, lastPvals):
+        """
+        @brief: This function analyzes the results of a sweep to determine if the states have converged
+        @param lastEvals:  the energies and properties of the states in their original order
+        @param lastPvals:  the energies and properties of the states in their original order
 
-        self.sortEnergies()
-        self.saveOrder(isFinalResults=True)
-        print("Output file created:", self.outfile, flush=True)
+        @return: delMax: the maximum change in the energies and properties of the states
+        @return: Evals, Pvals: the energies and properties of the states in their new order
+        """
+        # reset states to original order with missing values
+        self.Evals = copy.deepcopy(lastEvals)
+        self.Pvals = copy.deepcopy(lastPvals)
+        # use self.stateMap to reorder states
+        for pnt in range(self.numPoints):
+            statesToSwap = self.stateMap[:, pnt].tolist()
+            self.Evals[:, pnt] = self.Evals[statesToSwap, pnt]
+            self.Pvals[:, pnt] = self.Pvals[statesToSwap, pnt]
+        # check if states have converged
+        delEval = self.Evals - lastEvals
+        delPval = self.Pvals - lastPvals
+        delEval = delEval[np.isfinite(delEval)]
+        delPval = delPval[np.isfinite(delPval)]
+        delMax = delEval.max() + delPval.max()
+        return delMax
+
+    def sweepState(self, state, sweep, backward=False):
+        """
+        This function sweeps through the states, performing the reordering.
+        @param state: the state to be reordered
+        @param sweep: current sweep number (used for printing)
+        """
+
+        # skip state if out of bounds
+        if not (self.stateBounds[0] <= state <= self.stateBounds[1]):
+            return
+
+        # interpolate missing values (if any); only for reordering
+        if self.hasMissing:
+            if self.interpolate:
+                self.interpMissing()  # use linear interpolation
+
+        # save initial state info
+        stateEvals = copy.deepcopy(self.Evals)
+        statePvals = copy.deepcopy(self.Pvals)
+
+        # check if state has been modified too many times without improvement
+        if self.stateRepeatList[state] >= self.maxStateRepeat > 0:
+            self.stateRepeatList[state] += 1
+            if self.stateRepeatList[state] < self.maxStateRepeat + 10:
+                # if so, ignore it for 10 sweeps
+                print("###", "Skipping", "###", flush=True)
+                return
+            else:
+                # if state has been ignored for too long, test it again twice
+                self.stateRepeatList[state] = abs(self.maxStateRepeat - 2)
+
+        # reorder states across points for current state moving forwards
+        modifiedStates = self.sweepPoints(state, sweep, backwards=backward)
+
+        # check if state has been modified
+        delMax = stateDifference(self.Evals, self.Pvals, stateEvals, statePvals, state)
+        if delMax < 1e-12:
+            self.stateRepeatList[state] += 1
+        else:
+            self.stateRepeatList[state] = 0  # reset counter if state has been modified
+
+        # check if any other states have been modified
+        for modstate in modifiedStates:
+            self.stateRepeatList[modstate] = 0  # reset counter for modified states
 
 
-    def sweepPoints(self, minh, state, sweep, backwards=False):
+    def sweepPoints(self, state, sweep, backwards=False):
         """
         Sweep through points and sort states based on continuity of energy and amplitude norms
-        :param minh: minimum energy difference
         :param state: current state
         :param sweep: current sweep
         :param backwards: if True, sweep backwards
@@ -603,8 +558,8 @@ class SuaveStateScanner:
 
                 # nth order finite difference
                 # compare continuity differences from this state swapped with all other states
-                diffE = self.generateDerivatives(pnt, self.Evals[validStates], minh, backwards=backwards)
-                diffP = self.generateDerivatives(pnt, self.Pvals[validStates], minh, backwards=backwards)
+                diffE = self.generateDerivatives(pnt, self.Evals[validStates], backwards=backwards)
+                diffP = self.generateDerivatives(pnt, self.Pvals[validStates], backwards=backwards)
 
                 if diffE.size == 0 or diffP.size == 0:
                     continue
@@ -627,8 +582,8 @@ class SuaveStateScanner:
                     self.Pvals[[state, i], pnt] = self.Pvals[[i, state], pnt]
 
                     # nth order finite difference from swapped states
-                    diffE = self.generateDerivatives(pnt, self.Evals[validStates], minh, backwards=backwards)
-                    diffP = self.generateDerivatives(pnt, self.Pvals[validStates], minh, backwards=backwards)
+                    diffE = self.generateDerivatives(pnt, self.Evals[validStates], backwards=backwards)
+                    diffP = self.generateDerivatives(pnt, self.Pvals[validStates], backwards=backwards)
 
                     # swap back
                     self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
@@ -856,6 +811,11 @@ class SuaveStateScanner:
                 except ValueError:
                     print("invalid index for variable to print. Defaulting to '0' for energy", flush=True)
                     self.printVar = 0
+            if "interactive" in splitLine[0]:
+                if splitLine[1] == "True" or splitLine[1] == "true":
+                    self.interactive = True
+                else:
+                    self.interactive = False
             if "maxiter" in splitLine[0]:
                 try:
                     self.maxiter = int(splitLine[1])
@@ -1028,8 +988,306 @@ class SuaveStateScanner:
             raise ValueError("Invalid printVar index. Must be less than the number of columns "
                              "in the input file (excluding the reaction coordinate).")
 
-        return Evals, Pvals, allPnts
+        # find the smallest step size
+        minh = np.inf
+        for idx in range(numPoints - 1):
+            h = allPnts[idx + 1] - allPnts[idx]
+            if h < minh:
+                minh = h
 
+        return Evals, Pvals, allPnts, minh
+
+    def run(self):
+        """
+        @brief: This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
+        """
+        startArrange = time.time() # start timer
+
+        # arrange states such that energy and amplitude norms are continuous
+        delMax = np.inf # initialize delMax to infinity
+        converged = False # initialize convergence flag to false
+        sweep = 0 # initialize sweep counter
+        while not converged and sweep < self.maxiter: # iterate until convergence or max iterations reached
+            sweep += 1
+
+            startSweeptime = time.time() # start sweep timer
+
+            lastEvals, lastPvals = self.prepareSweep() # save last energies and properties
+
+            for state in range(self.numStates):
+                if sweep % 2 == 1:
+                    self.sweepState(state, sweep) # sweep state forwards
+                else:
+                    self.sweepState(state, sweep, self.sweepBack) # sweep state backwards
+
+            endSweeptime = time.time() # end sweep timer
+
+            delMax = self.analyzeSweep(lastEvals, lastPvals)
+
+            print("CONVERGENCE PROGRESS: {:e}".format(delMax), flush=True)
+            print("SWEEP TIME: {:e}".format(endSweeptime - startSweeptime), flush=True)
+            if delMax < self.tol:
+                converged = True
+
+        if converged:
+            print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
+        else:
+            print("!!!!!!!!!!!!!!!!!!!! FAILED TO CONVERRGE !!!!!!!!!!!!!!!!!!!!", flush=True)
+
+        # create copy of Evals and Pvals with interpolated missing values (if any)
+        if self.interpolate:
+            # save copy of Evals and Pvals with interpolated missing values (if any)
+            if self.hasMissing and self.keepInterp:
+                self.interpMissing(interpKind="cubic") # interpolate missing values with cubic spline
+
+        endArrange = time.time()
+        print("\n\nTotal time to arrange states:", endArrange - startArrange, flush=True)
+
+        self.sortEnergies()
+        self.saveOrder(isFinalResults=True)
+        print("Output file created:", self.outfile, flush=True)
+
+    def run_interactive(self):
+        """
+        This creates an interactive session for the user to manipulate the states
+        @requires: Plotly, dash
+        """
+
+        from dash import Dash, dcc, html, Input, Output, no_update
+        import plotly.graph_objects as go
+
+        app = Dash(__name__)
+
+        # get label of y-axis
+        if self.printVar == 0:
+            data0 = self.Evals
+        elif self.printVar < 0:
+            data0 = self.Pvals[:, :, self.printVar]
+        else:
+            data0 = self.Pvals[:, :, self.printVar - 1]
+
+        app.layout = html.Div([
+            html.Div([ # create a div for the plot
+            dcc.Graph(id='graph',
+                      figure={
+                          'data': [go.Scatter(x=self.allPnts, y=data0[state, :], mode='lines+markers',
+                                              name="State {}".format(state)) for state in range(self.numStates)],
+                          'layout': go.Layout(title="State Reordering", xaxis={'title': 'Reaction Coordinate'},
+                                              hovermode='closest',
+                                              # set dark theme
+                                              paper_bgcolor='rgba(42,42,42,0.42)',
+                                              plot_bgcolor='rgba(42,42,42,0.80)',
+                                              font={'color': 'white'})
+
+                      },
+                      style={'height': 800},
+                      config={'displayModeBar': False}
+                      ),
+            ]),
+            html.Div([ # create a div for the buttons and checkboxes
+                dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
+                dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
+                html.Div([ # create a div for reorder
+                            html.Button('Sweep and Reorder', id='button', n_clicks=0),  # make a button to start the animation
+                    ], style={'display': 'inline-block', 'width': '10%'}),
+                html.Div([ # create a div for redraw
+                            html.Button('Redraw', id='redraw', n_clicks=0),  # make a button to redraw the plot
+                    ], style={'display': 'inline-block', 'width': '10%'}),
+
+                html.Div([ # create a div for shuffle
+                            html.Button('Shuffle Values', id='shuffle-button', n_clicks=0), # make a button to start the animation
+                        ], style={'display': 'inline-block', 'width': '10%'}),
+                html.Div([  # create a div for save
+                    html.Button('Save Order', id='save-button', n_clicks=0),  # make a button to start the animation
+                ], style={'display': 'inline-block', 'width': '70%'}),
+            ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto'}),
+
+            html.Div([ # make a slider to control the points to be reordered
+                dcc.RangeSlider(id="point-slider", min=0, max=self.numPoints, step=1, value=self.pntBounds,
+                                marks={0: "Minimum Point", self.numPoints: "Maximum Point"},
+                                allowCross=False, tooltip={'always_visible': True, 'placement': 'top'}),
+                    ], style={'width': '95%', 'display': 'inline-block', 'padding': '20px 0px 20px 50px', 'margin': 'auto'}),
+
+            html.Div([ # make a slider to control the states to be reordered
+
+                dcc.RangeSlider(id="state-slider", min=0, max=self.numStates, step=1, value=self.stateBounds,
+                                marks={0: "Minimum State", self.numStates: "Maximum State"},
+                                allowCross=False, tooltip={'always_visible': True, 'placement': 'top'}),
+            ], style={'width': '95%', 'display': 'inline-block', 'padding': '30px 0px 30px 50px', 'margin': 'auto'}),
+
+            html.Div([  # create a div for checklist
+                dcc.Checklist(id='backSweep', options=[{'label': 'Sweep Backwards', 'value': 'sweepBack'}],
+                              value=False),
+            ], style={'display': 'inline-block', 'width': '10%'}),
+
+            html.Div([  # create a div for number of sweep to do
+                html.Label("Number of Sweeps:"),
+                dcc.Input(id='numSweeps', type='number', value=1, min=1, max=100),
+            ], style={'display': 'inline-block', 'width': '10%'}),
+
+            html.Div([  # create a div target variable
+                html.Label("Target Variable:"),
+                dcc.Input(placeholder="Target Variable", id="print-var", type="number", value=self.printVar, debounce=True),
+            ], style={'display': 'inline-block', 'width': '10%'}),
+
+            html.Div([  # create a div for stencil width
+                html.Label("Stencil Width:"),
+                dcc.Input(placeholder="Stencil Width", id="stencil-width", type="number", value=self.width, debounce=True),
+            ], style={'display': 'inline-block', 'width': '10%'}),
+
+            html.Div([  # create a div for derivative order
+                html.Label("Derivative Order:"),
+                dcc.Input(placeholder="Derivative Order", id="order-value", type="number", value=self.orders[0], debounce=True),
+            ], style={'display': 'inline-block', 'width': '10%'}),
+        ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto',
+                    # set dark theme
+                    'backgroundColor': '#111111', 'color': '#7FDBFF'})
+
+        sweep = 0 # initialize sweep counter
+        def make_figure():
+            """
+            This function creates the figure to be plotted
+            @return: fig: the figure to be plotted
+            """
+            nonlocal sweep
+
+
+            # update plot data
+            lastEvals, lastPvals = self.prepareSweep()  # save last energies and properties
+            if self.printVar == 0:
+                data = self.Evals
+            elif self.printVar < 0:
+                data = self.Pvals[:, :, self.printVar]
+            else:
+                data = self.Pvals[:, :, self.printVar - 1]
+
+            # create figure
+            fig = go.Figure(
+                data=[go.Scatter(x=self.allPnts, y=data[state, :], mode='lines+markers', name="State {}".format(state))
+                      for state in range(self.numStates)],
+
+                layout=go.Layout(title="State Reordering", xaxis={'title': 'Reaction Coordinate'},
+                                              hovermode='closest',
+                                              # set dark theme
+                                              paper_bgcolor='rgba(42,42,42,0.42)',
+                                              plot_bgcolor='rgba(42,42,42,0.80)',
+                                              font={'color': 'white'})
+            )
+
+
+            self.Evals = copy.deepcopy(lastEvals)
+            self.Pvals = copy.deepcopy(lastPvals)
+            return fig, f"Sweep {sweep}"
+
+        last_sweep_click = 0
+        last_shuffle_click = 0
+        last_redraw_click = 0
+        @app.callback(
+            [Output('graph', 'figure'), Output('loading-reorder-out', 'children')],
+            [Input('button', 'n_clicks'), Input('point-slider', 'value'), Input('state-slider', 'value'),
+             Input('print-var', 'value'), Input('stencil-width', 'value'),
+             Input('order-value', 'value'), Input('shuffle-button', 'n_clicks'), Input('backSweep', 'value'),
+             Input('numSweeps', 'value'), Input('redraw', 'n_clicks')])
+        def update_graph(sweep_clicks, point_bounds, state_bounds, print_var, stencil_width, order,
+                         shuffle_clicks, backSweep, numSweeps, redraw_clicks):
+            """
+            This function updates the graph
+
+            @param sweep_clicks:  the number of times the button has been clicked
+            @param point_bounds:  the bounds of the points to be plotted
+            @param state_bounds:  the bounds of the states to be plotted
+            @param print_var:  the variable to be plotted
+            @param stencil_width:  the width of the stencil to use
+            @param order:  the order to use for each sweep
+            @param shuffle_clicks:  the number of times the shuffle button has been clicked
+            @param backSweep:  whether to sweep backwards
+            @param numSweeps:  the number of sweeps to do
+            @param redraw_clicks:  the number of times the redraw button has been clicked
+            @return: the figure to be plotted
+            """
+            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, sweep
+
+            self.pntBounds = point_bounds
+            self.stateBounds = state_bounds
+            self.printVar = print_var
+            self.width = stencil_width
+            self.orders = [order] # only use one order for now
+
+            # check which button was clicked
+            if redraw_clicks > last_redraw_click:
+                last_redraw_click = redraw_clicks
+                return make_figure()[0], "Redrawn"
+            elif sweep_clicks > last_sweep_click and sweep_clicks > 0:
+                last_sweep_click = sweep_clicks
+            elif shuffle_clicks > last_shuffle_click:
+                last_shuffle_click = shuffle_clicks
+                self.shuffle_energy()
+                return make_figure()[0], "Shuffled"
+            else:
+                return no_update, no_update
+
+            if self.printVar >= self.numProps:
+                self.printVar = 0
+                print("Invalid print variable. Printing energy instead.", flush=True)
+
+            if self.orders[0] >= self.numPoints:
+                self.orders[0] = self.numPoints - 1
+                print("Order too large. Using minimum order instead.", flush=True)
+
+            if self.width <= order:
+                self.width = order + 1
+                print("Stencil width too small. Using minimum stencil width instead.", flush=True)
+
+            if self.width >= self.numPoints:
+                self.width = self.numPoints - 1
+                print("Stencil width too large. Using minimum stencil width instead.", flush=True)
+
+            # perform a sweep
+            lastEvals, lastPvals = self.prepareSweep()
+              # skip first sweep
+            for i in range(numSweeps):
+                lastEvals, lastPvals = self.prepareSweep()
+                sweep += 1
+                for state in range(self.numStates):
+                    self.sweepState(state, sweep, backward=backSweep)
+                self.analyzeSweep(lastEvals, lastPvals)
+            time.sleep(0.1)
+
+            delMax = self.analyzeSweep(lastEvals, lastPvals)
+            print("CONVERGENCE PROGRESS: {:e}".format(delMax), flush=True)
+
+            if delMax < self.tol:
+                print("%%%%%%%%%%%%%%%%%%%% CONVERGED {:e} %%%%%%%%%%%%%%%%%%%%%%".format(delMax), flush=True)
+                self.sortEnergies()
+
+            # update plot data
+            return make_figure()
+
+
+        @app.callback(
+            Output('loading-save-out', 'children'),
+            [Input('save-button', 'n_clicks')])
+        def save_order(n_clicks):
+            """
+            This function saves the order
+            @param n_clicks:  the number of times the button has been clicked
+            @return: the bounds of the points to be plotted
+            """
+            if n_clicks > 0:
+                lastEvals = copy.deepcopy(self.Evals)
+                lastPvals = copy.deepcopy(self.Pvals)
+
+                if self.hasMissing and self.interpolate:
+                    if self.keepInterp:
+                        self.interpMissing(interpKind="cubic")
+                self.saveOrder(isFinalResults=True)
+
+                self.Evals = copy.deepcopy(lastEvals)
+                self.Pvals = copy.deepcopy(lastPvals)
+                return "Order saved"
+
+        # run app without verbose output
+        app.run_server(debug=False, use_reloader=False)
 
 
 
@@ -1055,4 +1313,8 @@ if __name__ == "__main__":
         print("No configuration file specified. Using default values.", flush=True)
 
     suave = SuaveStateScanner(in_file, out_file, num_states, config_Path)
-    suave.run()
+
+    if suave.interactive:
+        suave.run_interactive()
+    else:
+        suave.run()

@@ -91,6 +91,7 @@ The configuration file is a text file with the following format:
 
 printVar = 0           # index for energy or property to print
 maxiter = 1000         # maximum number of iterations
+interactive = False    # interactive mode
 orders = [1]           # orders of derivatives to use
 width = 5              # stencil width
 futurePnts = 0         # number of future points to use
@@ -117,6 +118,14 @@ All configurations in the configuration file are optional and are defined as fol
 
 
 * `maxIter` - The maximum number of iterations to run the reordering procedure. (default: 1000)
+
+
+* `interactive` - If this is set to True, the script will run in interactive mode. This will allow the user to
+  perform reordering steps on the fly, modify bounds for states and points at each step, and save the current state. It
+  will also allow the user to redraw states to plot different properties. This is useful for debugging, manipulating, 
+  and for visualizing the reordering procedure. This setting is strongly recommended for debugging, however, it is not
+  is set to False by default because it is slower than the default mode, and it requires the user to have plotly and Dash
+  installed. (default: False)
 
 
 * `orders` - The 'orders' parameter defines the orders of derivatives desired for computation. This parameter must be a list of integers.
@@ -206,6 +215,7 @@ Troubleshooting
 If your data is not converging and/or the order of states is not accurate, there are a few things you can try:
 
 - Make sure that your data is continuous at each point and that the points are closely spaced. This tool will not work well with discontinuous data or has widely spaced points.
+    - You can use the `interactive` mode to visualize the data and check for discontinuities for the energy and properties.
 
 - Try changing the configuration parameters in the config file. You can experiment with different values for the 'orders', 'width', 'cutoff', and 'maxPan' parameters to see if that helps convergence and accuracy. 
 
@@ -221,6 +231,8 @@ If your data is not converging and/or the order of states is not accurate, there
 - Try shuffling the order of energy eigenvalues for each state along each point sampled from electronic structure calculations or other types of calculations. This can sometimes improve performance on data processed by SuaveStateScanner as input, where parameters from the initial configuration prevents states from being swapped. To do this, simply set the `doShuffle` parameter to True in the config file.
 
 - Consider sorting the states in batches with different bounds for the points `pntBounds`, states `stateBounds`, and energies (`eBounds` and/or `eWidth`). This can help to identify the correct order of states for each batch, which can then be used to sort the entire data set.
+  - For example, if you have a data set with 1000 points, you can sort the first 100 points with `pntBounds=[0, 99]` and then sort the next 100 points with `pntBounds=[100, 199]` and so on. This will help to identify the correct order of states for each batch, which can then be used to sort the entire data set.
+  - If using the `interactive` mode, you can use the `pntBounds` slider to set a custom range of points at each step of the algorithm. Similarly, you can use the `stateBounds` slider to set a custom range of states at each step of the algorithm. 
 
 - For problematic points that cause the script to fail, you can try to manually reorder the states at that point. This can be done by editing the input file and changing the order of the states at that point. The script will then use this new order as the starting point for its reordering procedure.
 

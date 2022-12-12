@@ -98,7 +98,8 @@ futurePnts = 0         # number of future points to use
 maxPan = None          # maximum pivots of stencil width
 stateBounds = None     # bounds for states to use
 pntBounds = None       # bounds for points to use
-sweepBack = True       # whether to sweep backwards across points after reordering forwards
+propBounds = None      # bounds for properties to use
+sweepBack = False       # whether to sweep backwards across points after reordering forwards
 eBounds = None         # bounds for energies to use
 eWidth = None          # width for valid energies to swap with current state at a point
 interpolate = False    # whether to interpolate over nan or inf values
@@ -152,10 +153,13 @@ All configurations in the configuration file are optional and are defined as fol
   in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
 
 
+* `propBounds` - The bounds of the properties to use for finite differences. If provided, this should be a list
+  in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the properties (default: None)
+
+
 * `sweepBack` - The 'sweepBack' parameter defines whether the script will sweep backwards through the points
    after it has finished sweeping forwards. This parameter is optional and must be a boolean. If this parameter is not provided, 
-   the default value 'True' will be used. It is recommended to keep this parameter as 'True' since the script loses 
-   accuracy at the boundaries due to the finite difference stencil. (default: True)
+   the default value 'False' will be used. (default: False)
 
 
 * `stateBounds` - The bounds of the states in the input file. If provided, this should be a

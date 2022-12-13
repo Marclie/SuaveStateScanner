@@ -1414,7 +1414,7 @@ class SuaveStateScanner:
                 raise PreventUpdate
             callback_running = True
 
-            if save_clicks > 0:
+            if save_clicks > last_save_clicks:
                 lastEvals = copy.deepcopy(self.Evals)
                 lastPvals = copy.deepcopy(self.Pvals)
 
@@ -1425,9 +1425,11 @@ class SuaveStateScanner:
 
                 self.Evals = copy.deepcopy(lastEvals)
                 self.Pvals = copy.deepcopy(lastPvals)
+                last_save_clicks = save_clicks
                 callback_running = False
                 return "Order saved"
             else:
+                last_save_clicks = save_clicks
                 callback_running = False
                 return no_update
 

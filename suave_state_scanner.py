@@ -748,9 +748,14 @@ class SuaveStateScanner:
         for pnt in range(self.pntBounds[0], self.pntBounds[1]):
             # shuffle indices of state for each point
             idx = np.arange(self.numStates) # get indices of states
-            np.random.shuffle(idx) # shuffle indices
+
+            #shuffle subset of indices from stateBounds[0] to stateBounds[1]
+            np.random.shuffle(idx[self.stateBounds[0]:self.stateBounds[1]]) # shuffle subset of indices
+
             self.Evals[:, pnt] = self.Evals[idx, pnt] # shuffle energies
             self.Pvals[:, pnt, :] = self.Pvals[idx, pnt, :] # shuffle properties
+            if self.stateMap is not None:
+                self.stateMap[:, pnt] = self.stateMap[idx, pnt] # shuffle stateMap
 
 
     # this function loads the state information of a reorder scan from a previous run of this script
@@ -1098,7 +1103,7 @@ class SuaveStateScanner:
         from dash.exceptions import PreventUpdate
         import plotly.graph_objects as go
 
-        app = Dash(__name__)
+        app = Dash(__name__) # create dash app
 
         # get label of y-axis
         if self.printVar == 0:
@@ -1250,7 +1255,7 @@ class SuaveStateScanner:
                               debounce=True),
                 ], style={'display': 'inline-block', 'width': '25%'}),
             ], style={'width': '65%', 'display': 'inline-block', 'padding': '0px 10px 0px 10px', 'margin': 'right'}),
-        ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto',
+        ], style={'width': '100%', 'padding': '10px 10px 10px 10px', 'margin': 'auto',
                     # set dark theme
                     'backgroundColor': '#111111', 'color': '#7FDBFF'})
 

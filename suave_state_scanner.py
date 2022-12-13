@@ -1134,16 +1134,20 @@ class SuaveStateScanner:
                 dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
                 dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
 
-                html.Div([ # create a div for reorder
-                            html.Button('Sweep and Reorder', id='button', n_clicks=0),  # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '5%'}),
-                html.Div([ # create a div for redraw
-                            html.Button('Redraw', id='redraw', n_clicks=0),  # make a button to redraw the plot
-                    ], style={'display': 'inline-block', 'width': '5%'}),
-
-                html.Div([  # create a div for save
-                    html.Button('Save Order', id='save-button', n_clicks=0),  # make a button to start the animation
-                ], style={'display': 'inline-block', 'width': '8%'}),
+                html.Div([  # create a div for sweep, redraw, undo, save
+                    html.Div([ # create a div for reorder
+                                html.Button('Sweep and Reorder', id='button', n_clicks=0),  # make a button to start the animation
+                        ], style={'display': 'inline-block', 'width': '25%'}),
+                    html.Div([ # create a div for redraw
+                                html.Button('Redraw', id='redraw', n_clicks=0),  # make a button to redraw the plot
+                        ], style={'display': 'inline-block', 'width': '20%'}),
+                    html.Div([  # create a div for undo
+                        html.Button('Undo', id='undo', n_clicks=0),  # make a button to undo the last swap
+                    ], style={'display': 'inline-block', 'width': '20%'}),
+                    html.Div([  # create a div for save
+                        html.Button('Save Order', id='save-button', n_clicks=0),  # make a button to start the animation
+                    ], style={'display': 'inline-block', 'width': '15%'}),
+                ], style={'display': 'inline-block', 'width': '20%'}),
                 html.Div([  # create a div for swapping two states by index with button
                     html.Div([
                         html.Button('Swap States', id='swap-button', n_clicks=0),  # make a button to start the animation
@@ -1291,6 +1295,11 @@ class SuaveStateScanner:
         last_shuffle_click = 0
         last_redraw_click = 0
         last_swap_click = 0
+
+        last_undo_click = 0
+        local_evals = copy.deepcopy(self.Evals)
+        local_pvals = copy.deepcopy(self.Pvals)
+
         callback_running = False
         @app.callback(
             [Output('graph', 'figure'), Output('loading-reorder-out', 'children')],
@@ -1299,10 +1308,10 @@ class SuaveStateScanner:
              Input('order-value', 'value'), Input('shuffle-button', 'n_clicks'), Input('backSweep', 'value'),
              Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('redraw', 'n_clicks'), Input('prop-slider', 'value'),
              Input('max-pan', 'value'), Input('energy-width', 'value'), Input('redundant', 'value'), Input('energy-slider', 'value'),
-             Input('swap-button', 'n_clicks'), Input('swap-input1', 'value'), Input('swap-input2', 'value')])
+             Input('swap-button', 'n_clicks'), Input('swap-input1', 'value'), Input('swap-input2', 'value'), Input('undo', 'n_clicks')])
         def update_graph(sweep_clicks, point_bounds, state_bounds, print_var, stencil_width, order, shuffle_clicks, backSweep,
                          interpolative, numSweeps, redraw_clicks, prop_bounds, maxPan, energyWidth, redundant, energy_bounds,
-                         swap_clicks, swap1, swap2):
+                         swap_clicks, swap1, swap2, undo_clicks):
             """
             This function updates the graph
 
@@ -1327,8 +1336,8 @@ class SuaveStateScanner:
             @param swap2:  the second state to swap
             @return: the figure to be plotted
             """
-            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, sweep, last_swap_click
-            nonlocal callback_running
+            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, sweep, last_swap_click, last_undo_click
+            nonlocal local_evals, local_pvals, callback_running
 
             if callback_running:
                 last_sweep_click = sweep_clicks
@@ -1391,6 +1400,13 @@ class SuaveStateScanner:
                 ret = make_figure()[0], "Redrawn"
                 callback_running = False
                 return ret
+            elif undo_clicks > last_undo_click:
+                last_undo_click = undo_clicks
+                self.Evals = copy.deepcopy(local_evals)
+                self.Pvals = copy.deepcopy(local_pvals)
+                ret = make_figure()[0], "Undone"
+                callback_running = False
+                return ret
             elif sweep_clicks > last_sweep_click and sweep_clicks > 0:
                 last_sweep_click = sweep_clicks
                 callback_running = False
@@ -1414,7 +1430,9 @@ class SuaveStateScanner:
 
             # perform a sweep
             lastEvals, lastPvals = self.prepareSweep()
-              # skip first sweep
+            local_evals = copy.deepcopy(lastEvals)
+            local_pvals = copy.deepcopy(lastPvals)
+            # skip first sweep
             for i in range(numSweeps):
                 lastEvals, lastPvals = self.prepareSweep()
                 sweep += 1

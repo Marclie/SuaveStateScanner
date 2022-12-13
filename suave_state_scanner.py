@@ -1424,7 +1424,7 @@ class SuaveStateScanner:
             elif swap_clicks > last_swap_click:
                 last_swap_click = swap_clicks
                 self.Evals[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.Evals[[swap2, swap1], point_bounds[0]:point_bounds[1]]
-                self.Pvals[[swap1, swap2]] = self.Pvals[[swap2, swap1]]
+                self.Pvals[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.Pvals[[swap2, swap1], point_bounds[0]:point_bounds[1]]
                 ret = make_figure()[0], "Swapped"
                 callback_running = False
                 return ret

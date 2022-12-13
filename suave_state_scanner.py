@@ -114,7 +114,7 @@ def mergediff(diff):
 
 
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
-def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWidth, hasEBounds, hasEWidth, fullRange):
+def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eLow, eHigh, eWidth, hasEBounds, hasEWidth):
     """
     @brief This function will build the valid array for the current point
     @param validArray: The array of valid states
@@ -123,29 +123,25 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eBounds, eWid
     @param pnt: The current point
     @param ref: The reference point
     @param upbound: The upper bound for the current point
-    @param eBounds: The energy bounds for the current point
+    @param eLow: The lower bound for the energy
+    @param eHigh: The upper bound for the energy
     @param eWidth: The energy width for the current point
-    @param hasMissing: The array of missing states
-    @param hasInterp: The flag for if interpolation is being used
+    @param hasEBounds: Whether the energy bounds are being used
+    @param hasEWidth: Whether the energy width is being used
     @return: The valid array for the current point
     """
 
-    # set all states less than lower bound and greater than upper bound to False
-    if not fullRange:
-        for state in prange(0, Evals.shape[0]):
-            if state < lobound or state >= upbound:
-                validArray[state] = False
-
     # set all states at points that are not valid to False
-    for state in prange(lobound, upbound):
+    for state in prange(0, Evals.shape[0]):
+        # set all states less than lower bound and greater than upper bound to False
+        if state < lobound or state >= upbound:
+            validArray[state] = False
         if hasEBounds:
-            if not (eBounds[0] <= Evals[state, pnt] <= eBounds[1]):
+            if not (eLow <= Evals[state, pnt] <= eHigh):
                 validArray[state] = False
         if hasEWidth:
             if eWidth < abs(Evals[ref, pnt] - Evals[state, pnt]):
                 validArray[state] = False
-
-
 
     return validArray
 
@@ -655,14 +651,24 @@ class SuaveStateScanner:
 
 
         hasEBounds = self.eBounds is not None # check if energy bounds are specified
-        eBounds = np.array(self.eBounds) # convert energy bounds to array
+        if hasEBounds:
+            eLow = self.eBounds[0] # lower bound for energy
+            eHigh = self.eBounds[1] # upper bound for energy
+        else:
+            eLow = -np.inf
+            eHigh = np.inf
         hasEWidth = self.eWidth is not None  # check if energy width is provided
+        if hasEWidth:
+            eWidth = self.eWidth
+        else:
+            eWidth = np.inf
+
         fullRange = lobound == 0 and upbound == self.Evals.shape[0]  # check if the full range is being used
 
         if hasEBounds or hasEWidth or not fullRange:
             # set states outside of bounds or missing to be invalid
             validArray = buildValidArray(validArray, self.Evals, lobound, pnt, ref, upbound,
-                                         eBounds, self.eWidth, hasEBounds, hasEWidth, fullRange)
+                                         eLow, eHigh, eWidth, hasEBounds, hasEWidth)
         else:
             pass # if no bounds or width are specified, all states are valid
 

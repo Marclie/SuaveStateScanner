@@ -1117,8 +1117,9 @@ class SuaveStateScanner:
                       figure={
                           'data': [go.Scatter(x=self.allPnts, y=data0[state, :], mode='lines+markers',
                                               name="State {}".format(state)) for state in range(self.numStates)],
-                          'layout': go.Layout(title="State Reordering", xaxis={'title': 'Reaction Coordinate'},
+                          'layout': go.Layout(title="SuaveStateScanner", xaxis={'title': 'Reaction Coordinate'},
                                               hovermode='closest',
+                                              uirevision='constant',
                                               # set dark theme
                                               paper_bgcolor='rgba(42,42,42,0.42)',
                                               plot_bgcolor='rgba(42,42,42,0.80)',
@@ -1129,22 +1130,40 @@ class SuaveStateScanner:
                       config={'displayModeBar': False}
                       ),
             ]),
-            html.Div([ # create a div for the buttons and checkboxes
-                dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
+            html.Div([ # create a div for the buttons
                 dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
+                dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
+
                 html.Div([ # create a div for reorder
                             html.Button('Sweep and Reorder', id='button', n_clicks=0),  # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '10%'}),
+                    ], style={'display': 'inline-block', 'width': '5%'}),
                 html.Div([ # create a div for redraw
                             html.Button('Redraw', id='redraw', n_clicks=0),  # make a button to redraw the plot
-                    ], style={'display': 'inline-block', 'width': '10%'}),
+                    ], style={'display': 'inline-block', 'width': '5%'}),
 
-                html.Div([ # create a div for shuffle
-                            html.Button('Shuffle Values', id='shuffle-button', n_clicks=0), # make a button to start the animation
-                        ], style={'display': 'inline-block', 'width': '10%'}),
                 html.Div([  # create a div for save
                     html.Button('Save Order', id='save-button', n_clicks=0),  # make a button to start the animation
-                ], style={'display': 'inline-block', 'width': '70%'}),
+                ], style={'display': 'inline-block', 'width': '8%'}),
+                html.Div([  # create a div for swapping two states by index with button
+                    html.Div([
+                        html.Button('Swap States', id='swap-button', n_clicks=0),  # make a button to start the animation
+                    ], style={'display': 'inline-block', 'width': '13%'}),
+                    html.Div([
+                        html.Label('State 1:'), # make an input for state 1
+                        dcc.Input(id='swap-input1', type='number', value=0, min=0, max=self.numStates - 1, step=1),
+                    ], style={'display': 'inline-block', 'width': '28%'}),
+                    html.Div([
+                        html.Label('State 2:'), # make an input for state 2
+                        dcc.Input(id='swap-input2', type='number', value=1, min=0, max=self.numStates - 1, step=1)
+                    ], style={'display': 'inline-block', 'width': '30%'}),
+                    html.Div([  # create a div for shuffle
+                        html.Button('Shuffle Values', id='shuffle-button', n_clicks=0),
+                        # make a button to start the animation
+                    ], style={'display': 'inline-block', 'width': '12%'}),
+                ], style={'display': 'inline-block', 'width': '40%'}),
+
+
+
             ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto'}),
 
             html.Div([  # create a div target variable
@@ -1254,12 +1273,13 @@ class SuaveStateScanner:
                 data=[go.Scatter(x=self.allPnts, y=data[state, :], mode='lines+markers', name="State {}".format(state))
                       for state in range(self.numStates)],
 
-                layout=go.Layout(title="State Reordering", xaxis={'title': 'Reaction Coordinate'},
-                                              hovermode='closest',
-                                              # set dark theme
-                                              paper_bgcolor='rgba(42,42,42,0.42)',
-                                              plot_bgcolor='rgba(42,42,42,0.80)',
-                                              font={'color': 'white'})
+                layout= go.Layout(title="SuaveStateScanner", xaxis={'title': 'Reaction Coordinate'},
+                                    hovermode='closest',
+                                    uirevision='constant',
+                                    # set dark theme
+                                    paper_bgcolor='rgba(42,42,42,0.42)',
+                                    plot_bgcolor='rgba(42,42,42,0.80)',
+                                    font={'color': 'white'})
             )
 
 
@@ -1270,6 +1290,7 @@ class SuaveStateScanner:
         last_sweep_click = 0
         last_shuffle_click = 0
         last_redraw_click = 0
+        last_swap_click = 0
         callback_running = False
         @app.callback(
             [Output('graph', 'figure'), Output('loading-reorder-out', 'children')],
@@ -1277,9 +1298,11 @@ class SuaveStateScanner:
              Input('print-var', 'value'), Input('stencil-width', 'value'),
              Input('order-value', 'value'), Input('shuffle-button', 'n_clicks'), Input('backSweep', 'value'),
              Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('redraw', 'n_clicks'), Input('prop-slider', 'value'),
-             Input('max-pan', 'value'), Input('energy-width', 'value'), Input('redundant', 'value'), Input('energy-slider', 'value')])
+             Input('max-pan', 'value'), Input('energy-width', 'value'), Input('redundant', 'value'), Input('energy-slider', 'value'),
+             Input('swap-button', 'n_clicks'), Input('swap-input1', 'value'), Input('swap-input2', 'value')])
         def update_graph(sweep_clicks, point_bounds, state_bounds, print_var, stencil_width, order, shuffle_clicks, backSweep,
-                         interpolative, numSweeps, redraw_clicks, prop_bounds, maxPan, energyWidth, redundant, energy_bounds):
+                         interpolative, numSweeps, redraw_clicks, prop_bounds, maxPan, energyWidth, redundant, energy_bounds,
+                         swap_clicks, swap1, swap2):
             """
             This function updates the graph
 
@@ -1299,9 +1322,13 @@ class SuaveStateScanner:
             @param energyWidth:  the width of the energy window
             @param redundant:  whether to use redundant swaps
             @param energy_bounds:  the bounds of the energies to be plotted
+            @param swap_clicks:  the number of times the swap button has been clicked
+            @param swap1:  the first state to swap
+            @param swap2:  the second state to swap
             @return: the figure to be plotted
             """
-            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, sweep, callback_running
+            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, sweep, last_swap_click
+            nonlocal callback_running
 
             if callback_running:
                 last_sweep_click = sweep_clicks
@@ -1311,6 +1338,7 @@ class SuaveStateScanner:
 
             callback_running = True
 
+            # assign values to global variables
             self.pntBounds = point_bounds
             self.stateBounds = state_bounds
             self.propBounds = prop_bounds
@@ -1324,25 +1352,7 @@ class SuaveStateScanner:
             self.maxPan = int(maxPan)
             self.energyWidth = float(energyWidth)
 
-            # check which button was clicked
-            if redraw_clicks > last_redraw_click:
-                last_redraw_click = redraw_clicks
-                ret = make_figure()[0], "Redrawn"
-                callback_running = False
-                return ret
-            elif sweep_clicks > last_sweep_click and sweep_clicks > 0:
-                last_sweep_click = sweep_clicks
-            elif shuffle_clicks > last_shuffle_click:
-                last_shuffle_click = shuffle_clicks
-                self.shuffle_energy()
-                ret = make_figure()[0], "Shuffled"
-                callback_running = False
-                return ret
-            else:
-                callback_running = False
-                return no_update, no_update
-
-            # check input
+            # check input values
             if self.printVar >= self.numProps:
                 self.printVar = 0
                 print("Invalid print variable. Printing energy instead.", flush=True)
@@ -1373,6 +1383,33 @@ class SuaveStateScanner:
             if abs(self.energyBounds[1] - self.energyBounds[0]) <= 1e-6:
                 self.energyBounds[1] = self.energyBounds[0] + 1e-6
                 print("Energy bounds too small. Using minimum energy bounds instead.", flush=True)
+
+
+            # check which button was clicked and update the graph accordingly
+            if redraw_clicks > last_redraw_click:
+                last_redraw_click = redraw_clicks
+                ret = make_figure()[0], "Redrawn"
+                callback_running = False
+                return ret
+            elif sweep_clicks > last_sweep_click and sweep_clicks > 0:
+                last_sweep_click = sweep_clicks
+                callback_running = False
+            elif shuffle_clicks > last_shuffle_click:
+                last_shuffle_click = shuffle_clicks
+                self.shuffle_energy()
+                ret = make_figure()[0], "Shuffled"
+                callback_running = False
+                return ret
+            elif swap_clicks > last_swap_click:
+                last_swap_click = swap_clicks
+                self.Evals[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.Evals[[swap2, swap1], point_bounds[0]:point_bounds[1]]
+                self.Pvals[[swap1, swap2]] = self.Pvals[[swap2, swap1]]
+                ret = make_figure()[0], "Swapped"
+                callback_running = False
+                return ret
+            else:
+                callback_running = False
+                return no_update, no_update
 
 
             # perform a sweep
@@ -1425,13 +1462,14 @@ class SuaveStateScanner:
 
                 self.Evals = copy.deepcopy(lastEvals)
                 self.Pvals = copy.deepcopy(lastPvals)
-                last_save_clicks = save_clicks
                 callback_running = False
+                last_save_clicks = save_clicks
                 return "Order saved"
             else:
-                last_save_clicks = save_clicks
                 callback_running = False
-                return no_update
+                last_save_clicks = save_clicks
+                return ""
+
 
         # run app without verbose output
         app.run_server(debug=False, use_reloader=False)

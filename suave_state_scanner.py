@@ -1367,7 +1367,7 @@ class SuaveStateScanner:
             self.energyWidth = float(energyWidth)
 
             # check input values
-            if self.printVar > self.numProps:
+            if self.printVar > self.numProps + 1:
                 self.printVar = 0
                 print("Invalid print variable. Printing energy instead.", flush=True)
 

@@ -1176,8 +1176,8 @@ class SuaveStateScanner:
             ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto'}),
 
             html.Div([  # create a div target variable
-                dcc.Slider(id="print-var", value=0, min=0, max=self.numProps + 1,
-                            marks={0: "Print Energy", self.numProps + 1: "Print Property"},
+                dcc.Slider(id="print-var", value=0, min=0, max=self.numProps,
+                            marks={0: "Print Energy", self.numProps: "Print Property"},
                             step=1, tooltip={'always_visible': True, 'placement': 'top'}),
             ], style={'width': '95%', 'display': 'inline-block', 'padding': '30px 0px 30px 50px', 'margin': 'auto'}),
 
@@ -1367,7 +1367,7 @@ class SuaveStateScanner:
             self.energyWidth = float(energyWidth)
 
             # check input values
-            if self.printVar > self.numProps + 1:
+            if self.printVar > self.numProps:
                 self.printVar = 0
                 print("Invalid print variable. Printing energy instead.", flush=True)
 

@@ -1348,6 +1348,8 @@ class SuaveStateScanner:
                 last_sweep_click = sweep_clicks
                 last_shuffle_click = shuffle_clicks
                 last_redraw_click = redraw_clicks
+                last_swap_click = swap_clicks
+                last_undo_click = undo_clicks
                 raise PreventUpdate
 
             callback_running = True

@@ -1160,7 +1160,7 @@ class SuaveStateScanner:
                         html.Button('Undo', id='undo', n_clicks=0),  # make a button to undo the last swap
                     ], style={'display': 'inline-block', 'width': '20%'}),
                     html.Div([  # create a div for save
-                        html.Button('Save Order', id='save-button', n_clicks=0),  # make a button to start the animation
+                        html.Button('Save Output', id='save-button', n_clicks=0),  # make a button to start the animation
                     ], style={'display': 'inline-block', 'width': '15%'}),
                 ], style={'display': 'inline-block', 'width': '20%'}),
                 html.Div([  # create a div for swapping two states by index with button
@@ -1180,49 +1180,49 @@ class SuaveStateScanner:
                         # make a button to start the animation
                     ], style={'display': 'inline-block', 'width': '12%'}),
                 ], style={'display': 'inline-block', 'width': '40%'}),
-
-
-
             ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto'}),
 
             html.Div([  # create a div target variable
+                html.Div("Print Selection", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
                 dcc.Slider(id="print-var", value=0, min=0, max=self.numProps,
                             marks={0: "Print Energy", self.numProps: "Print Property"},
-                            step=1, tooltip={'always_visible': True, 'placement': 'top'}),
-            ], style={'width': '95%', 'display': 'inline-block', 'padding': '30px 0px 30px 50px', 'margin': 'auto'}),
+                            step=1, tooltip={'always_visible': True, 'placement': 'left'}),
+            ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 15px 50px', 'margin': 'auto'}),
 
             html.Div([  # make a slider to control the properties to be reordered
-
+                html.Div("Property Range", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
                 dcc.RangeSlider(id="prop-slider", min=0, max=self.numProps, step=1, value=self.propBounds,
                                 marks={0: "Property Lower Bound", self.numProps: "Property Upper Bound"},
-                                allowCross=False, tooltip={'always_visible': True, 'placement': 'top'})
-            ], style={'width': '95%', 'display': 'inline-block', 'padding': '30px 0px 20px 50px', 'margin': 'auto'}),
+                                allowCross=False, tooltip={'always_visible': True, 'placement': 'left'})
+            ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 5px 50px', 'margin': 'auto'}),
 
             html.Div([ # make a slider to control the points to be reordered
+                html.Div("Point Range", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
                 dcc.RangeSlider(id="point-slider", min=0, max=self.numPoints, step=1, value=self.pntBounds,
-                                marks={0: "Minimum Point", self.numPoints: "Maximum Point"},
-                                allowCross=False, tooltip={'always_visible': True, 'placement': 'top'}),
-                    ], style={'width': '95%', 'display': 'inline-block', 'padding': '20px 0px 20px 50px', 'margin': 'auto'}),
+                                marks={i: "{}".format(self.allPnts[i]) for i in range(self.numPoints)},
+                                allowCross=False, tooltip={'always_visible': True, 'placement': 'left'}),
+                    ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 5px 50px', 'margin': 'auto'}),
 
             html.Div([ # make a slider to control the states to be reordered
-
+                html.Div("State Range", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
                 dcc.RangeSlider(id="state-slider", min=0, max=self.numStates, step=1, value=self.stateBounds,
-                                marks={0: "Minimum State", self.numStates: "Maximum State"},
-                                allowCross=False, tooltip={'always_visible': True, 'placement': 'top'}),
-            ], style={'width': '95%', 'display': 'inline-block', 'padding': '20px 0px 20px 50px', 'margin': 'auto'}),
+                                marks={i: "{}".format(i) for i in range(self.numStates)},
+                                allowCross=False, tooltip={'always_visible': True, 'placement': 'left'}),
+            ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 5px 50px', 'margin': 'auto'}),
 
             html.Div([  # make a slider to control the energy range
-
+                html.Div("Energy Range", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
                 dcc.RangeSlider(id="energy-slider", min=minE - 1e-3, max=maxE + 1e-3, step=1e-6, value=[minE - 1e-3, maxE + 1e-3],
-                                marks={0: "Minimum Energy", maxE: "Maximum Energy"},
-                                allowCross=False, tooltip={'always_visible': True, 'placement': 'top'}),
-            ], style={'width': '95%', 'display': 'inline-block', 'padding': '20px 0px 20px 50px', 'margin': 'auto'}),
+                                marks={minE: "Minimum Energy", maxE: "Maximum Energy"},
+                                allowCross=False, tooltip={'always_visible': True, 'placement': 'left'}),
+            ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 5px 50px', 'margin': 'auto'}),
 
             html.Div([  # create a div for energy width
-                dcc.Slider(id="energy-width", value=abs(maxE - minE), min=1e-12, max=abs(maxE - minE) + 1e-3,
-                            marks={0: "Minimum Energy Width", abs(maxE - minE) + 1e-3: "Maximum Energy Width"},
-                            step=1e-6, tooltip={'always_visible': True, 'placement': 'top'}),
-            ], style={'width': '95%', 'display': 'inline-block', 'padding': '10px 0px 40px 50px', 'margin': 'auto'}),
+                html.Div("Energy Width", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
+                dcc.Slider(id="energy-width", value=abs(maxE - minE) + 1e-3, min=0, max=abs(maxE - minE) + 1e-3,
+                            marks={1e-12: "Minimum Energy Width", abs(maxE - minE) + 1e-3: "Maximum Energy Width"},
+                            step=1e-6, tooltip={'always_visible': True, 'placement': 'left'}),
+            ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 20px 50px', 'margin': 'auto'}),
 
             html.Div([ # make a div for all checklist options
                 html.Div([  # create a div for checklist sweep backwards

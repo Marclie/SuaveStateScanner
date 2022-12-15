@@ -1149,36 +1149,39 @@ class SuaveStateScanner:
                 html.Div([  # create a div for sweep, redraw, stop, undo, save
                     html.Div([ # create a div for reorder
                                 html.Button('Sweep and Reorder', id='button', n_clicks=0),  # make a button to start the animation
-                        ], style={'display': 'inline-block', 'width': '25%'}),
+                        ], style={'display': 'inline-block', 'width': '15%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                     html.Div([ # create a div for redraw
                                 html.Button('Redraw', id='redraw', n_clicks=0),  # make a button to redraw the plot
-                        ], style={'display': 'inline-block', 'width': '20%'}),
+                        ], style={'display': 'inline-block', 'width': '10%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                     html.Div([ # create a div for stop
                                 html.Button('Abort', id='stop-button', n_clicks=0),  # make a button to stop the animation
-                        ], style={'display': 'inline-block', 'width': '15%'}),
+                        ], style={'display': 'inline-block', 'width': '10%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                     html.Div([  # create a div for undo
                         html.Button('Undo', id='undo', n_clicks=0),  # make a button to undo the last swap
-                    ], style={'display': 'inline-block', 'width': '20%'}),
+                    ], style={'display': 'inline-block', 'width': '6%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+                    html.Div([  # create a div for redo
+                        html.Button('Redo', id='redo', n_clicks=0),  # make a button to redo the last swap
+                    ], style={'display': 'inline-block', 'width': '10%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                     html.Div([  # create a div for save
                         html.Button('Save Output', id='save-button', n_clicks=0),  # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '15%'}),
-                ], style={'display': 'inline-block', 'width': '20%'}),
+                    ], style={'display': 'inline-block', 'width': '5%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+                ], style={'display': 'inline-block', 'width': '40%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                 html.Div([  # create a div for swapping two states by index with button
                     html.Div([
                         html.Button('Swap States', id='swap-button', n_clicks=0),  # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '13%'}),
+                    ], style={'display': 'inline-block', 'width': '20%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                     html.Div([
                         html.Label('State 1:'), # make an input for state 1
                         dcc.Input(id='swap-input1', type='number', value=0, min=0, max=self.numStates - 1, step=1),
-                    ], style={'display': 'inline-block', 'width': '28%'}),
+                    ], style={'display': 'inline-block', 'width': '28%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                     html.Div([
                         html.Label('State 2:'), # make an input for state 2
                         dcc.Input(id='swap-input2', type='number', value=1, min=0, max=self.numStates - 1, step=1)
-                    ], style={'display': 'inline-block', 'width': '30%'}),
+                    ], style={'display': 'inline-block', 'width': '30%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                     html.Div([  # create a div for shuffle
                         html.Button('Shuffle Values', id='shuffle-button', n_clicks=0),
                         # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '12%'}),
+                    ], style={'display': 'inline-block', 'width': '19%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                 ], style={'display': 'inline-block', 'width': '40%'}),
             ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto'}),
 
@@ -1306,17 +1309,82 @@ class SuaveStateScanner:
             self.Pvals = copy.deepcopy(lastPvals)
             return fig, f"Sweep {sweep}"
 
-        last_sweep_click = 0
-        last_shuffle_click = 0
-        last_redraw_click = 0
-        last_swap_click = 0
-        last_stop_click = 0
+        eval_undo = [] # initialize history of energies for undo
+        pval_undo = [] # initialize history of properties for undo
+        eval_redo = [] # initialize memory of energies for redo
+        pval_redo = [] # initialize memory of properties for redo
 
-        last_undo_click = 0
-        local_evals = copy.deepcopy(self.Evals)
-        local_pvals = copy.deepcopy(self.Pvals)
+        def undo_callback():
+            """
+            This function undoes the last sweep
+            @return: Boolean: True if successful, False otherwise
+            """
+            nonlocal eval_undo, pval_undo, eval_redo, pval_redo
+            if len(eval_undo) < 1: # if there is nothing to undo
+                return False
 
-        callback_running = False
+            if len(eval_redo) > 10: # if there are too many redos
+                # remove the oldest redo
+                eval_redo.pop(0)
+                pval_redo.pop(0)
+
+            # add the current state to the redo memory
+            eval_redo.append(self.Evals)
+            pval_redo.append(self.Pvals)
+
+            # set the current state to the previous state and remove the previous state from the undo memory
+            self.Evals = copy.deepcopy(eval_undo.pop(-1))
+            self.Pvals = copy.deepcopy(pval_undo.pop(-1))
+
+            return True
+
+        def redo_callback():
+            """
+            This function redoes the last sweep
+            @return: None
+            """
+            nonlocal eval_undo, pval_undo, eval_redo, pval_redo
+            if len(eval_redo) < 1: # if there is nothing to redo
+                return False # do nothing
+
+            if len(eval_undo) > 10: # if there are too many undos
+                # remove the oldest undo
+                eval_undo.pop(0)
+                pval_undo.pop(0)
+
+            # add the current state to the undo memory
+            eval_undo.append(self.Evals)
+            pval_undo.append(self.Pvals)
+
+            # set the current state to the next state and remove the next state from the redo memory
+            self.Evals = copy.deepcopy(eval_redo.pop(-1))
+            self.Pvals = copy.deepcopy(pval_redo.pop(-1))
+
+            return True
+
+        def store_update():
+            """
+            This function stores the current state of the plot
+            @return: None
+            """
+            nonlocal eval_undo, pval_undo, eval_redo, pval_redo
+            if len(eval_undo) > 10:
+                eval_undo.pop(0)
+                pval_undo.pop(0)
+            eval_undo.append(copy.deepcopy(self.Evals))
+            pval_undo.append(copy.deepcopy(self.Pvals))
+            eval_redo = []
+            pval_redo = []
+
+
+        last_sweep_click = 0 # initialize last sweep click
+        last_shuffle_click = 0 # initialize last shuffle click
+        last_redraw_click = 0 # initialize last redraw click
+        last_swap_click = 0 # initialize last swap click
+        last_stop_click = 0 # initialize last stop click
+        last_undo_click = 0 # initialize last undo click
+        last_redo_click = 0 # initialize last redo click
+        callback_running = False # initialize callback running check
         @app.callback(
             [Output('graph', 'figure'), Output('loading-reorder-out', 'children')],
             [Input('button', 'n_clicks'), Input('point-slider', 'value'), Input('state-slider', 'value'),
@@ -1325,10 +1393,10 @@ class SuaveStateScanner:
              Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('redraw', 'n_clicks'), Input('prop-slider', 'value'),
              Input('max-pan', 'value'), Input('energy-width', 'value'), Input('redundant', 'value'), Input('energy-slider', 'value'),
              Input('swap-button', 'n_clicks'), Input('swap-input1', 'value'), Input('swap-input2', 'value'), Input('undo', 'n_clicks'),
-             Input('stop-button', 'n_clicks')])
+             Input('stop-button', 'n_clicks'), Input('redo', 'n_clicks')])
         def update_graph(sweep_clicks, point_bounds, state_bounds, print_var, stencil_width, order, shuffle_clicks, backSweep,
                          interpolative, numSweeps, redraw_clicks, prop_bounds, maxPan, energyWidth, redundant, energy_bounds,
-                         swap_clicks, swap1, swap2, undo_clicks, stop_clicks):
+                         swap_clicks, swap1, swap2, undo_clicks, stop_clicks, redo_clicks):
             """
             This function updates the graph
 
@@ -1353,28 +1421,32 @@ class SuaveStateScanner:
             @param swap2:  the second state to swap
             @param undo_clicks:  the number of times the undo button has been clicked
             @param stop_clicks:  the number of times the stop button has been clicked
+            @param redo_clicks:  the number of times the redo button has been clicked
             @return: the figure to be plotted
             """
-            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, last_swap_click, last_undo_click, last_stop_click
-            nonlocal sweep, local_evals, local_pvals, callback_running
+            nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, last_swap_click
+            nonlocal last_undo_click, last_stop_click, last_redo_click
+            nonlocal eval_undo, pval_undo, eval_redo, pval_redo
+            nonlocal sweep, callback_running
 
-            if stop_clicks > last_stop_click:
-                last_stop_click = stop_clicks
-                self.halt = True
-                return no_update, no_update
+            if stop_clicks > last_stop_click: # if stop button has been clicked
+                last_stop_click = stop_clicks # update last stop click
+                self.halt = True # halt the scanner
+                return no_update, no_update # return no update
             else:
-                self.halt = False
+                self.halt = False # otherwise, don't halt the scanner
 
-            if callback_running:
+            if callback_running: # if callback is running
+                # update all click counters
                 last_sweep_click = sweep_clicks
                 last_shuffle_click = shuffle_clicks
                 last_redraw_click = redraw_clicks
                 last_swap_click = swap_clicks
                 last_undo_click = undo_clicks
                 last_stop_click = stop_clicks
-                raise PreventUpdate
+                raise PreventUpdate # prevent update
 
-            callback_running = True
+            callback_running = True # set callback running to true
 
             # assign values to global variables
             self.pntBounds = point_bounds
@@ -1391,76 +1463,93 @@ class SuaveStateScanner:
             self.energyWidth = float(energyWidth)
 
             # check input values
-            if self.printVar > self.numProps:
-                self.printVar = 0
+            if self.printVar > self.numProps: # if print variable is greater than number of properties
+                self.printVar = 0 # set print variable to 0 (energy)
                 print("Invalid print variable. Printing energy instead.", flush=True)
 
-            if self.orders[0] >= self.numPoints:
-                self.orders[0] = self.numPoints - 1
+            if self.orders[0] >= self.numPoints: # if order is greater than number of points
+                self.orders[0] = self.numPoints - 1 # set order to number of points - 1
                 print("Order too large. Using minimum order instead.", flush=True)
 
-            if self.width <= order:
-                self.width = order + 1
+            if self.width <= order: # if stencil width is less than or equal to order
+                self.width = order + 1 # set stencil width to order + 1
                 print("Stencil width too small. Using minimum stencil width instead.", flush=True)
 
-            if self.width >= self.numPoints:
-                self.width = self.numPoints - 1
+            if self.width >= self.numPoints: # if stencil width is greater than or equal to number of points
+                self.width = self.numPoints - 1 # set stencil width to number of points - 1
                 print("Stencil width too large. Using minimum stencil width instead.", flush=True)
 
-            if self.pntBounds[0] >= self.pntBounds[1] - 1:
-                self.pntBounds[1] = self.pntBounds[0] + 1
+            if self.pntBounds[0] >= self.pntBounds[1] - 1: # if point bounds are invalid
+                self.pntBounds[1] = self.pntBounds[0] + 1 # set point bounds to minimum
                 print("Point bounds too small. Using minimum point bounds instead.", flush=True)
-            if self.stateBounds[0] >= self.stateBounds[1] - 1:
-                self.stateBounds[1] = self.stateBounds[0] + 1
+            if self.stateBounds[0] >= self.stateBounds[1] - 1: # if state bounds are invalid
+                self.stateBounds[1] = self.stateBounds[0] + 1 # set state bounds to minimum
                 print("State bounds too small. Using minimum state bounds instead.", flush=True)
-            if self.propBounds[0] >= self.propBounds[1] - 1:
-                if self.propBounds[0] == 0 and self.propBounds[1] == 0:
-                    self.ignoreProps = True
+            if self.propBounds[0] >= self.propBounds[1] - 1: # if property bounds are invalid
+                if self.propBounds[0] == 0 and self.propBounds[1] == 0: # if property bounds are 0
+                    self.ignoreProps = True # ignore properties
                 else:
                     print("Property bounds too small. Using minimum property bounds instead.", flush=True)
-            if abs(self.energyBounds[1] - self.energyBounds[0]) <= 1e-6:
-                self.energyBounds[1] = self.energyBounds[0] + 1e-6
+            if abs(self.energyBounds[1] - self.energyBounds[0]) <= 1e-6: # if energy bounds are invalid
+                self.energyBounds[1] = self.energyBounds[0] + 1e-6 # set energy bounds to minimum
                 print("Energy bounds too small. Using minimum energy bounds instead.", flush=True)
 
 
             # check which button was clicked and update the graph accordingly
-            if redraw_clicks > last_redraw_click:
+            if sweep_clicks > last_sweep_click and sweep_clicks > 0: # if sweep button was clicked
+                # perform a sweep
+                last_sweep_click = sweep_clicks  # update last sweep click
+            elif redraw_clicks > last_redraw_click: # redraw button clicked
                 last_redraw_click = redraw_clicks
                 ret = make_figure()[0], "Redrawn"
                 callback_running = False
                 return ret
-            elif undo_clicks > last_undo_click:
+            elif undo_clicks > last_undo_click: # undo button clicked
                 last_undo_click = undo_clicks
-                self.Evals = copy.deepcopy(local_evals)
-                self.Pvals = copy.deepcopy(local_pvals)
-                ret = make_figure()[0], "Undone"
+
+                if undo_callback(): # undo the last action
+                    ret = make_figure()[0], "Undone" # update figure
+                else:
+                    ret = no_update, "Nothing to undo"
                 callback_running = False
                 return ret
-            elif sweep_clicks > last_sweep_click and sweep_clicks > 0:
-                last_sweep_click = sweep_clicks
-                callback_running = False
-            elif shuffle_clicks > last_shuffle_click:
-                last_shuffle_click = shuffle_clicks
-                self.shuffle_energy()
-                ret = make_figure()[0], "Shuffled"
+            elif redo_clicks > last_redo_click:
+                last_redo_click = redo_clicks # redo button clicked
+                if redo_callback(): # redo the last action
+                    ret = make_figure()[0], "Redone" # update figure
+                else:
+                    ret = no_update, "Nothing to redo"
                 callback_running = False
                 return ret
-            elif swap_clicks > last_swap_click:
-                last_swap_click = swap_clicks
+            elif shuffle_clicks > last_shuffle_click: # shuffle button clicked
+                last_shuffle_click = shuffle_clicks # update last shuffle click
+
+                store_update() # store current state
+                self.shuffle_energy() # shuffle energy
+
+                ret = make_figure()[0], "Shuffled" # update figure
+                callback_running = False # set callback running to false
+                return ret # return figure
+            elif swap_clicks > last_swap_click: # swap button clicked
+                last_swap_click = swap_clicks # update last swap click
+
+                store_update() # store current state
                 self.Evals[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.Evals[[swap2, swap1], point_bounds[0]:point_bounds[1]]
                 self.Pvals[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.Pvals[[swap2, swap1], point_bounds[0]:point_bounds[1]]
+
                 ret = make_figure()[0], "Swapped"
                 callback_running = False
                 return ret
-            else:
+            else: # otherwise, do nothing
                 callback_running = False
                 return no_update, no_update
 
 
+            store_update() # store current state
+
             # perform a sweep
             lastEvals, lastPvals = self.prepareSweep()
-            local_evals = copy.deepcopy(lastEvals)
-            local_pvals = copy.deepcopy(lastPvals)
+
             # skip first sweep
             for i in range(numSweeps):
                 lastEvals, lastPvals = self.prepareSweep()
@@ -1478,6 +1567,7 @@ class SuaveStateScanner:
                 self.sortEnergies()
 
             # update plot data
+            last_sweep_click = sweep_clicks  # update last sweep click (should already be updated, but just in case)
             ret = make_figure()
             callback_running = False
             return ret

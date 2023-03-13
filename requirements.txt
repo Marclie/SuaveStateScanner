@@ -1,0 +1,6 @@
+dash
+nstencil
+numba
+numpy
+plotly
+scipy

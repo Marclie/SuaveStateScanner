@@ -1135,68 +1135,62 @@ class SuaveStateScanner:
                       ),
             ]),
             html.Div([ # create a div for the buttons
-                dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
-                dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
 
-                html.Div([  # create a div for sweep, redraw, stop, undo, save
-                    html.Div([  # create a div target variable
-                        html.Div("Print Selection",
-                                 style={'display': 'inline-block', 'width': '100%', 'padding': '0px 0px 0px 0px', 'margin': 'auto'}),
-                        dcc.Dropdown(id="print-var", value=0,
-                                     options=[{'label': "Energy" if i == 0 else "Property " + str(i), 'value': i} for i
-                                              in
-                                              range(self.numProps + 1)]),
-                    ], style={'width': '20%', 'display': 'inline-block', 'padding': '0px 2px 0px 2px',
-                              'margin': 'auto'}),
-                    html.Div([ # create a div for reorder
-                                html.Button('Sweep and Reorder', id='button', n_clicks=0),  # make a button to start the animation
-                        ], style={'display': 'inline-block', 'width': '15%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                    html.Div([ # create a div for redraw
-                                html.Button('Redraw', id='redraw', n_clicks=0),  # make a button to redraw the plot
-                        ], style={'display': 'inline-block', 'width': '10%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                    html.Div([ # create a div for stop
-                                html.Button('Abort', id='stop-button', n_clicks=0),  # make a button to stop the animation
-                        ], style={'display': 'inline-block', 'width': '10%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                    html.Div([  # create a div for undo
-                        html.Button('Undo', id='undo', n_clicks=0),  # make a button to undo the last swap
-                    ], style={'display': 'inline-block', 'width': '6%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                    html.Div([  # create a div for redo
-                        html.Button('Redo', id='redo', n_clicks=0),  # make a button to redo the last swap
-                    ], style={'display': 'inline-block', 'width': '10%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                    html.Div([  # create a div for save
-                        html.Button('Save Output', id='save-button', n_clicks=0),  # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '5%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                    html.Div([  # make a checklist to control the properties to be reordered
-                        html.Div("Property List",
-                                 style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
-                        dcc.Checklist(id="prop-list",
-                                      options=[{'label': str(i+1), 'value': i} for i in range(self.numProps)],
-                                      value=self.propList,
-                                      labelStyle={'display': 'inline-block', 'width': '20%', 'margin': 'auto'}),
-                    ], style={'width': '15%', 'display': 'inline-block', 'padding': '0px 10px 0px 20px',
-                              'margin': 'auto'}),
-                ], style={'display': 'inline-block', 'width': '40%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+                html.H2("Controls"),
 
-                html.Div([  # create a div for swapping two states by index with button
-                    html.Div([
-                        html.Button('Swap States', id='swap-button', n_clicks=0),  # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '20%', 'padding': '2px 1px 2px 2px', 'margin': 'auto'}),
-                    html.Div([
-                        html.Label('State 1:'), # make an input for state 1
-                        dcc.Input(id='swap-input1', type='number', value=0, min=0, max=self.numStates - 1, step=1),
-                    ], style={'display': 'inline-block', 'width': '28%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                    html.Div([
-                        html.Label('State 2:'), # make an input for state 2
-                        dcc.Input(id='swap-input2', type='number', value=1, min=0, max=self.numStates - 1, step=1)
-                    ], style={'display': 'inline-block', 'width': '30%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                    html.Div([  # create a div for shuffle
-                        html.Button('Shuffle Values', id='shuffle-button', n_clicks=0),
-                        # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '19%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                ], style={'display': 'inline-block', 'width': '40%'}),
-            ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto'}),
+                html.Div([  # Print Selection
+                    html.Label("Print Selection"),
+                    dcc.Dropdown(id="print-var", value=0,
+                                 options=[{'label': "Energy" if i == 0 else "Property " + str(i), 'value': i}
+                                          for i
+                                          in range(self.numProps + 1)], clearable=False),
+                ], style={'display': 'inline-block', 'padding': '10px'}),
 
+                html.Div([  # Sweep, Redraw, Stop, Undo, Save, Property List
+                    html.Div([  # Redraw
+                        html.Button('Redraw', id='redraw', n_clicks=0, style={'padding': '2px'}),
+                        html.Button('Sweep and Reorder', id='button', n_clicks=0, style={'padding': '2px'}),
+                        html.Button('Abort', id='stop-button', n_clicks=0, style={'padding': '2px'}),
+                    ], style={'display': 'inline-block'}),
+                ], style={'display': 'inline-block', 'width': '100%'}),
+                html.Div([  # Save
+                    html.Button('Save Output', id='save-button', n_clicks=0),
+                ], style={'display': 'inline-block', 'width': '100%'}),
+                html.Div([  # Undo Redo
+                    html.Button('Undo', id='undo', n_clicks=0, style={'padding': '2px'}),
+                    html.Button('Redo', id='redo', n_clicks=0, style={'padding': '2px'}),
+                ], style={'display': 'inline-block', 'width': '100%'}),
+            ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px'}),
 
+            html.Div([  # create a div for swapping two states by index with button
+                html.Div([
+                    html.Button('Swap States', id='swap-button', n_clicks=0),  # make a button to start the animation
+                ], style={'display': 'inline-block', 'padding': '2px 10px 2px 2px', 'margin': 'auto'}),
+                html.Div([
+                    html.Label('State 1:'),  # make an input for state 1
+                    dcc.Input(id='swap-input1', type='number', value=0, min=0, max=self.numStates - 1, step=1),
+                ], style={'display': 'inline-block', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+                html.Div([
+                    html.Label('State 2:'),  # make an input for state 2
+                    dcc.Input(id='swap-input2', type='number', value=1, min=0, max=self.numStates - 1, step=1)
+                ], style={'display': 'inline-block', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+                html.Div([  # create a div for shuffle
+                    html.Button('Shuffle Values', id='shuffle-button', n_clicks=0),
+                    # make a button to start the animation
+                ], style={'display': 'inline-block', 'padding': '2px 2px 2px 50px', 'margin': 'auto'}),
+            ], style={'display': 'inline-block', 'width': '100%'}),
+
+            dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
+            dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
+
+            html.H2("Settings"),
+
+            html.Div([  # Property List
+                html.Label("Property List"),
+                dcc.Checklist(id="prop-list",
+                              options=[{'label': str(i + 1), 'value': i} for i in range(self.numProps)],
+                              value=self.propList, labelStyle={'display': 'inline-block', 'padding': '10px'})
+            ], style={'display': 'inline-block', 'padding': '10px'}),
 
             html.Div([ # make a slider to control the points to be reordered
                 html.Div("Point Range", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),

@@ -17,16 +17,15 @@ Table of Contents
 Introduction
 ------------
 
-This tool takes a sequence of points for multiple electronic states with energies and properties and reorders them so that each state is continuous for these quantities. This script reorders states by defining [n-point finite differences](https://en.wikipedia.org/wiki/Finite_difference_coefficient) along a
-sliding window centered at each point. The point is swapped with all states, and the state that is most continuous at
-that point is kept.
+SuaveStateScanner is a tool that labels and ensures the continuity of excited state potential energy curves (PECs) in electronic structure calculations. 
+It assigns consistent labels to multiple states along PECs by enforcing the continuity of the excited-state energies and properties (i.e. transition dipole moments, oscillator strengths, and norms of operators) along the reaction coordinate.
 
-This script is useful, for example, in electronic structure calculations where excited state energies are often discontinuous
-w.r.t their properties. The script can help identify the symmetry of electronic states without explicitly running a symmetry
-calculation.
+This script is particularly useful in cases where excited state energies are often discontinuous with respect to their properties. 
+It helps separate excited states that are close in energy but have different properties. This is useful for identifying and
+plotting the properties of excited states as a function of the reaction coordinate.
 
-The script is a general mathematical tool to enforce the continuity of eigenvalues along a set of points with properties extracted from the eigenvectors
-that need to be continuous along some coordinate. This will only work well for inherently continuous data with closely spaced points.
+While SuaveStateScanner is targeted for use in quantum chemistry, it can also be used a general mathematical tool for
+separating and labeling sets of eigenvectors that have similar eigenvalues along some coordinate.
 
 
 Usage
@@ -98,7 +97,7 @@ futurePnts = 0         # number of future points to use
 maxPan = None          # maximum pivots of stencil width
 stateBounds = None     # bounds for states to use
 pntBounds = None       # bounds for points to use
-propBounds = None      # bounds for properties to use
+propList = None      # bounds for properties to use
 sweepBack = False       # whether to sweep backwards across points after reordering forwards
 eBounds = None         # bounds for energies to use
 eWidth = None          # width for valid energies to swap with current state at a point
@@ -153,8 +152,8 @@ All configurations in the configuration file are optional and are defined as fol
   in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the reaction coordinates (default: None)
 
 
-* `propBounds` - The bounds of the properties to use for finite differences. If provided, this should be a list
-  in the form [xmin, xmax] where xmin/xmax are the minimum/maximum index for the properties (default: None)
+* `propList` - A list of the indices of the properties to enforce continuity for. If provided, this should be a list
+  of integers. If this parameter is not provided, the default value 'None' will be used, meaning all properties will be used. (default: None)
 
 
 * `sweepBack` - The 'sweepBack' parameter defines whether the script will sweep backwards through the points

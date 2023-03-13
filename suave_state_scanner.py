@@ -1144,15 +1144,12 @@ class SuaveStateScanner:
                                  options=[{'label': "Energy" if i == 0 else "Property " + str(i), 'value': i}
                                           for i
                                           in range(self.numProps + 1)], clearable=False),
-                ], style={'display': 'inline-block', 'padding': '10px'}),
-
-                html.Div([  # Sweep, Redraw, Stop, Undo, Save, Property List
                     html.Div([  # Redraw
                         html.Button('Redraw', id='redraw', n_clicks=0, style={'padding': '2px'}),
                         html.Button('Sweep and Reorder', id='button', n_clicks=0, style={'padding': '2px'}),
                         html.Button('Abort', id='stop-button', n_clicks=0, style={'padding': '2px'}),
                     ], style={'display': 'inline-block'}),
-                ], style={'display': 'inline-block', 'width': '100%'}),
+                ], style={'display': 'inline-block', 'padding': '10px'}),
                 html.Div([  # Save
                     html.Button('Save Output', id='save-button', n_clicks=0),
                 ], style={'display': 'inline-block', 'width': '100%'}),

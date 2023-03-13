@@ -1,5 +1,4 @@
 dash
-nstencil
 numba
 numpy
 plotly

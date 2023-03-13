@@ -26,7 +26,7 @@ import scipy.interpolate as interpolate
 
 from nstencil import makeStencil
 
-@njit(parallel=True, fastmath=True, nogil=True, cache=True)
+@njit(parallel=True, fastmath=False, nogil=True, cache=True)
 def approxDeriv(F, diff, center, stencil, alphas, sN):
     """
     @brief This function approximates the n-th order derivatives of a the energies and properties
@@ -46,22 +46,16 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
         pnt = center + stencil[s]
         diff[:, s] = alphas[s] * F[:, pnt]
 
-@njit(parallel=True, fastmath=True, nogil=True, cache=True)
-def getMetric(diffE, diffP):
+@njit(parallel=True, fastmath=False, nogil=True, cache=True)
+def getMetric(dE, dP):
     """
     @brief This function computes the ordering metric for a given set of finite differences.
-    @param diffE: the finite differences of the energies at the center point
-    @param diffP: the finite differences of the properties at the center point
-
+    @param dE: the finite differences of the energies at the center point (shape: (numStates))
+    @param dP: the finite differences of the properties at the center point (shape: (numStates, numFeatures))
     @return: the ordering metric for the given finite differences
     """
 
-    # sum finite differences of all properties for each state
-    diffP = np.sum(diffP, axis=1)
-
-    # metric uses the sum of the product of the properties and energies for each state
-    # to enforce the product rule of differentiation for the change in the ordering metric
-    return (np.log(1 + diffE * diffP)).sum()
+    return (dE @ dP).sum()
 
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
@@ -103,7 +97,7 @@ def combineVals(Evals, Pvals, allPnts, tempInput):
             for feat in prange(numFeat):
                 tempInput[pnt * numStates + state, feat + 2] = Pvals[state, pnt, feat]
 
-@njit(parallel=True, fastmath=True, nogil=True, cache=True)
+@njit(parallel=True, fastmath=False, nogil=True, cache=True)
 def mergediff(diff):
     """
     @brief This function will merge the finite differences for the energy and properties
@@ -201,13 +195,13 @@ class SuaveStateScanner:
         self.sweepBack = False # whether to sweep backwards across points after reordering forwards
         self.eBounds = None # bounds for energies to use
         self.eWidth = None # width for valid energies to swap with current state at a point
-        self.interpolate = False # whether to keep interpolated energies and properties
+        self.interpolate = False # whether to interpolated energies during reordering
         self.keepInterp = False # whether to keep interpolated energies and properties
         self.nthreads = 1 # number of threads to use
         self.makePos = False # whether to make the properties positive
         self.doShuffle = False # whether to shuffle the points before reordering
         self.maxStateRepeat = -1 # maximum number of times to repeat swapping an unmodified state
-        self.redundantSwaps = False # whether to allow redundant swaps of lower-lying states
+        self.redundantSwaps = True # whether to allow redundant swaps of lower-lying states
 
         self.interactive = False # whether to interactive the reordering
         self.halt = False # whether to halt the reordering
@@ -219,10 +213,10 @@ class SuaveStateScanner:
         numba.set_num_threads(1 if self.nthreads is None else self.nthreads)
 
         # parse the input file to get the energies and properties for each state at each point
-        self.Evals, self.Pvals, self.allPnts, self.minh = self.parseInputFile()
+        self.E, self.P, self.allPnts, self.minh = self.parseInputFile()
 
         self.numPoints = len(self.allPnts)  # number of points
-        self.numProps = self.Pvals.shape[2]  # number of properties
+        self.numProps = self.P.shape[2]  # number of properties
 
         # set the bounds to use
         if self.pntBounds is None:
@@ -276,8 +270,8 @@ class SuaveStateScanner:
         self.stateRepeatList = np.zeros(self.numStates)
 
         # check if any points are nan or inf
-        self.hasMissing = np.isnan(self.Evals).any() or np.isinf(self.Evals).any() or np.isnan(
-            self.Pvals).any() or np.isinf(self.Pvals).any()
+        self.hasMissing = np.isnan(self.E).any() or np.isinf(self.E).any() or np.isnan(
+            self.P).any() or np.isinf(self.P).any()
         if self.hasMissing:
             print("\nWARNING: Energies or properties contain nan or inf values.")
             if self.interpolate:
@@ -391,9 +385,9 @@ class SuaveStateScanner:
         """
         @brief This function sorts the energies and properties of the state such that the first point is in ascending energy order.
         """
-        idx = self.Evals[:, 0].argsort()
-        self.Evals[:] = self.Evals[idx]
-        self.Pvals[:] = self.Pvals[idx]
+        idx = self.E[:, 0].argsort()
+        self.E[:] = self.E[idx]
+        self.P[:] = self.P[idx]
 
     def prepareSweep(self):
         """
@@ -403,10 +397,10 @@ class SuaveStateScanner:
         """
 
         # copy initial state info
-        lastEvals = copy.deepcopy(self.Evals)
-        lastPvals = copy.deepcopy(self.Pvals)
+        lastEvals = copy.deepcopy(self.E)
+        lastPvals = copy.deepcopy(self.P)
         if self.interpolate:
-            # save copy of Evals and Pvals with interpolated missing values (if any)
+            # save copy of E and P with interpolated missing values (if any)
             if self.hasMissing and self.keepInterp:
                 self.interpMissing(interpKind="cubic")  # interpolate missing values with cubic spline
             self.sortEnergies()
@@ -414,9 +408,9 @@ class SuaveStateScanner:
         else:
             self.sortEnergies()  # only sort energies and properties when saving order
             self.saveOrder()
-        # reset Evals and Pvals to original order
-        self.Evals = copy.deepcopy(lastEvals)
-        self.Pvals = copy.deepcopy(lastPvals)
+        # reset E and P to original order
+        self.E = copy.deepcopy(lastEvals)
+        self.P = copy.deepcopy(lastPvals)
         self.sortEnergies()  # sort energies and properties
         # create map of current state to last state for each point
         self.stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
@@ -431,19 +425,19 @@ class SuaveStateScanner:
         @param lastPvals:  the energies and properties of the states in their original order
 
         @return: delMax: the maximum change in the energies and properties of the states
-        @return: Evals, Pvals: the energies and properties of the states in their new order
+        @return: E, P: the energies and properties of the states in their new order
         """
         # reset states to original order with missing values
-        self.Evals = copy.deepcopy(lastEvals)
-        self.Pvals = copy.deepcopy(lastPvals)
+        self.E = copy.deepcopy(lastEvals)
+        self.P = copy.deepcopy(lastPvals)
         # use self.stateMap to reorder states
         for pnt in range(self.numPoints):
             statesToSwap = self.stateMap[:, pnt].tolist()
-            self.Evals[:, pnt] = self.Evals[statesToSwap, pnt]
-            self.Pvals[:, pnt] = self.Pvals[statesToSwap, pnt]
+            self.E[:, pnt] = self.E[statesToSwap, pnt]
+            self.P[:, pnt] = self.P[statesToSwap, pnt]
         # check if states have converged
-        delEval = self.Evals - lastEvals
-        delPval = self.Pvals - lastPvals
+        delEval = self.E - lastEvals
+        delPval = self.P - lastPvals
         delEval = delEval[np.isfinite(delEval)]
         delPval = delPval[np.isfinite(delPval)]
         delMax = delEval.max() + delPval.max()
@@ -469,8 +463,8 @@ class SuaveStateScanner:
                 self.interpMissing()  # use linear interpolation
 
         # save initial state info
-        stateEvals = copy.deepcopy(self.Evals)
-        statePvals = copy.deepcopy(self.Pvals)
+        stateEvals = copy.deepcopy(self.E)
+        statePvals = copy.deepcopy(self.P)
 
         # check if state has been modified too many times without improvement
         if self.stateRepeatList[state] >= self.maxStateRepeat > 0:
@@ -487,7 +481,7 @@ class SuaveStateScanner:
         modifiedStates = self.sweepPoints(state, sweep, backwards=backward)
 
         # check if state has been modified
-        delMax = stateDifference(self.Evals, self.Pvals, stateEvals, statePvals, state)
+        delMax = stateDifference(self.E, self.P, stateEvals, statePvals, state)
         if delMax < 1e-12:
             self.stateRepeatList[state] += 1
         else:
@@ -560,7 +554,7 @@ class SuaveStateScanner:
             if state not in validStates: # if current state is not valid, skip it
                 continue
 
-            if ~np.isfinite(self.Evals[state, pnt]): # if current state is missing, skip it
+            if ~np.isfinite(self.E[state, pnt]): # if current state is missing, skip it
                 continue
 
             # Bubble Sort algorithm to rearrange states
@@ -568,16 +562,16 @@ class SuaveStateScanner:
 
                 # nth order finite difference
                 # compare continuity differences from this state swapped with all other states
-                diffE = self.generateDerivatives(pnt, self.Evals[validStates], backwards=backwards)
+                dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
                 if not self.ignoreProps:
-                    diffP = self.generateDerivatives(pnt, self.Pvals[validStates, :, propStart:propEnd], backwards=backwards)
+                    dP = self.generateDerivatives(pnt, self.P[validStates, :, propStart:propEnd], backwards=backwards)
                 else:
-                    diffP = np.ones_like(self.Pvals[validStates, :, 0])
+                    dP = np.ones_like(self.P[validStates, :, 0])
 
-                if diffE.size == 0 or diffP.size == 0:
+                if dE.size == 0 or dP.size == 0:
                     continue
 
-                diff = self.getMetric(diffE, diffP)
+                diff = self.getMetric(dE, dP)
                 minDif = (diff, state)
 
                 # loop through all states to find the best swap
@@ -587,31 +581,31 @@ class SuaveStateScanner:
                         continue
                     if i == state: # skip current state
                         continue
-                    if ~np.isfinite(self.Evals[i, pnt]): # skip missing states
+                    if ~np.isfinite(self.E[i, pnt]): # skip missing states
                         continue
 
                     # swap states
-                    self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
-                    self.Pvals[[state, i], pnt] = self.Pvals[[i, state], pnt]
+                    self.E[[state, i], pnt] = self.E[[i, state], pnt]
+                    self.P[[state, i], pnt] = self.P[[i, state], pnt]
 
                     # nth order finite difference from swapped states
-                    diffE = self.generateDerivatives(pnt, self.Evals[validStates], backwards=backwards)
+                    dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
                     if not self.ignoreProps:
-                        diffP = self.generateDerivatives(pnt, self.Pvals[validStates, :, propStart:propEnd],
-                                                         backwards=backwards)
+                        dP = self.generateDerivatives(pnt, self.P[validStates, :, propStart:propEnd],
+                                                      backwards=backwards)
                     else:
-                        diffP = np.ones_like(self.Pvals[validStates, :, 0])
+                        dP = np.ones_like(self.P[validStates, :, 0])
 
                     # swap back
-                    self.Evals[[state, i], pnt] = self.Evals[[i, state], pnt]
-                    self.Pvals[[state, i], pnt] = self.Pvals[[i, state], pnt]
+                    self.E[[state, i], pnt] = self.E[[i, state], pnt]
+                    self.P[[state, i], pnt] = self.P[[i, state], pnt]
 
                     # if derivatives are missing, skip this state
-                    if diffE.size == 0 or diffP.size == 0:
+                    if dE.size == 0 or dP.size == 0:
                         continue
 
                     # get metric of continuity difference
-                    diff = self.getMetric(diffE, diffP)
+                    diff = self.getMetric(dE, dP)
 
                     if diff < minDif[0]: # if this state is better than the current best, update the best
                         minDif = (diff, i)
@@ -625,8 +619,8 @@ class SuaveStateScanner:
                 # swap state in point with new state that has the most continuous change in amplitude norms
                 newState = minDif[1]
                 if state != newState:
-                    self.Evals[[state, newState], pnt] = self.Evals[[newState, state], pnt]
-                    self.Pvals[[state, newState], pnt] = self.Pvals[[newState, state], pnt]
+                    self.E[[state, newState], pnt] = self.E[[newState, state], pnt]
+                    self.P[[state, newState], pnt] = self.P[[newState, state], pnt]
 
                     # update self.stateMap
                     self.stateMap[[state, newState], pnt] = self.stateMap[[newState, state], pnt]
@@ -670,11 +664,11 @@ class SuaveStateScanner:
         else:
             eWidth = np.inf
 
-        fullRange = lobound == 0 and upbound == self.Evals.shape[0]  # check if the full range is being used
+        fullRange = lobound == 0 and upbound == self.E.shape[0]  # check if the full range is being used
 
         if hasEBounds or hasEWidth or not fullRange:
             # set states outside of bounds or missing to be invalid
-            validArray = buildValidArray(validArray, self.Evals, lobound, pnt, ref, upbound,
+            validArray = buildValidArray(validArray, self.E, lobound, pnt, ref, upbound,
                                          eLow, eHigh, eWidth, hasEBounds, hasEWidth)
         else:
             pass # if no bounds or width are specified, all states are valid
@@ -687,21 +681,21 @@ class SuaveStateScanner:
         return validStates # return sorted list of valid states at each point
 
     def interpMissing(self, interpKind = 'linear'):
-        """Interpolate missing values in Evals and Pvals"""
+        """Interpolate missing values in E and P"""
         print("\nInterpolating missing values...", end=" ", flush=True)
 
         # interpolate all missing values
         for i in range(self.numStates):
-            for j in range(self.Pvals.shape[2]): # loop over properties
+            for j in range(self.P.shape[2]): # loop over properties
                 # get the indices of non-missing values
-                idx = np.isfinite(self.Pvals[i, :, j])
+                idx = np.isfinite(self.P[i, :, j])
                 # interpolate the missing values over points
-                self.Pvals[i, :, j] = interpolate.interp1d(self.allPnts[idx], self.Pvals[i, idx, j], kind=interpKind, fill_value='extrapolate')(self.allPnts)
+                self.P[i, :, j] = interpolate.interp1d(self.allPnts[idx], self.P[i, idx, j], kind=interpKind, fill_value='extrapolate')(self.allPnts)
 
             # get the indices of non-missing values
-            idx = np.isfinite(self.Evals[i, :])
+            idx = np.isfinite(self.E[i, :])
             # interpolate the missing values over points
-            self.Evals[i, :] = interpolate.interp1d(self.allPnts[idx], self.Evals[i, idx], kind=interpKind, fill_value='extrapolate')(self.allPnts)
+            self.E[i, :] = interpolate.interp1d(self.allPnts[idx], self.E[i, idx], kind=interpKind, fill_value='extrapolate')(self.allPnts)
         print("Done\n", flush=True)
 
     def interpolateDerivatives(self, diff, sN):
@@ -729,14 +723,14 @@ class SuaveStateScanner:
         print("\nMoving missing values to the end of the array...", end=" ", flush=True)
         for pnt in range(self.numPoints):
             # get the indices of missing values
-            idx = np.where(~np.isfinite(self.Evals[:, pnt]))[0]
+            idx = np.where(~np.isfinite(self.E[:, pnt]))[0]
             
             count = 0 
             for i in idx: # loop over missing states
                 # move missing values to the end of the array at each point and update stateMap
                 end = self.numStates - 1 - count
-                self.Evals[[i, end], pnt] = self.Evals[[end, i], pnt]
-                self.Pvals[[i, end], pnt] = self.Pvals[[end, i], pnt]
+                self.E[[i, end], pnt] = self.E[[end, i], pnt]
+                self.P[[i, end], pnt] = self.P[[end, i], pnt]
                 self.stateMap[[i, end], pnt] = self.stateMap[[end, i], pnt]
                 count += 1
 
@@ -759,8 +753,8 @@ class SuaveStateScanner:
             #shuffle subset of indices from stateBounds[0] to stateBounds[1]
             np.random.shuffle(idx[self.stateBounds[0]:self.stateBounds[1]]) # shuffle subset of indices
 
-            self.Evals[:, pnt] = self.Evals[idx, pnt] # shuffle energies
-            self.Pvals[:, pnt, :] = self.Pvals[idx, pnt, :] # shuffle properties
+            self.E[:, pnt] = self.E[idx, pnt] # shuffle energies
+            self.P[:, pnt, :] = self.P[idx, pnt, :] # shuffle properties
             if self.stateMap is not None:
                 self.stateMap[:, pnt] = self.stateMap[idx, pnt] # shuffle stateMap
 
@@ -774,12 +768,12 @@ class SuaveStateScanner:
         @param numColumns: The number of columns in the file
         """
 
-        Ecurves = genfromtxt('Evals.csv')
-        Ncurves = genfromtxt('Pvals.csv')
+        Ecurves = genfromtxt('E.csv')
+        Ncurves = genfromtxt('P.csv')
 
         self.allPnts = genfromtxt('allPnts.csv')
-        self.Evals = Ecurves.reshape((numStates, numPoints))
-        self.Pvals = Ncurves.reshape((numStates, numPoints, numColumns))
+        self.E = Ecurves.reshape((numStates, numPoints))
+        self.P = Ncurves.reshape((numStates, numPoints, numColumns))
 
 
     def saveOrder(self, isFinalResults = False):
@@ -790,19 +784,19 @@ class SuaveStateScanner:
         @return: The energy and properties for each state at each point written to a file "tempInput.csv"
         """
 
-        tempInput = zeros((self.Pvals.shape[0] * self.Pvals.shape[1], self.Pvals.shape[2] + 2))
-        combineVals(self.Evals, self.Pvals, self.allPnts, tempInput)
+        tempInput = zeros((self.P.shape[0] * self.P.shape[1], self.P.shape[2] + 2))
+        combineVals(self.E, self.P, self.allPnts, tempInput)
 
         savetxt("tempInput.csv", tempInput, fmt='%20.12f')
 
         newCurvesList = []
         for pnt in range(self.allPnts.shape[0]):
             if self.printVar == 0:
-                newCurvesList.append(self.Evals[:, pnt])
+                newCurvesList.append(self.E[:, pnt])
             elif self.printVar < 0:
-                newCurvesList.append(self.Pvals[:, pnt, self.printVar])
+                newCurvesList.append(self.P[:, pnt, self.printVar])
             else:
-                newCurvesList.append(self.Pvals[:, pnt, self.printVar - 1])
+                newCurvesList.append(self.P[:, pnt, self.printVar - 1])
 
         newCurves = stack(newCurvesList, axis=1)
         newCurves = insert(newCurves, 0, self.allPnts, axis=0)
@@ -814,11 +808,11 @@ class SuaveStateScanner:
             newCurvesList = []
             for pnt in range(self.allPnts.shape[0]):
                 if self.printVar == 0:
-                    newCurvesList.append(self.Evals[:, pnt])
+                    newCurvesList.append(self.E[:, pnt])
                 elif self.printVar < 0:
-                    newCurvesList.append(self.Pvals[:, pnt, self.printVar])
+                    newCurvesList.append(self.P[:, pnt, self.printVar])
                 else:
-                    newCurvesList.append(self.Pvals[:, pnt, self.printVar - 1])
+                    newCurvesList.append(self.P[:, pnt, self.printVar - 1])
             newCurves = stack(newCurvesList, axis=1)
             newCurves = insert(newCurves, 0, self.allPnts, axis=0)
             savetxt(self.outfile, newCurves, fmt='%20.12f')
@@ -1087,9 +1081,9 @@ class SuaveStateScanner:
         else:
             print("!!!!!!!!!!!!!!!!!!!! FAILED TO CONVERRGE !!!!!!!!!!!!!!!!!!!!", flush=True)
 
-        # create copy of Evals and Pvals with interpolated missing values (if any)
+        # create copy of E and P with interpolated missing values (if any)
         if self.interpolate:
-            # save copy of Evals and Pvals with interpolated missing values (if any)
+            # save copy of E and P with interpolated missing values (if any)
             if self.hasMissing and self.keepInterp:
                 self.interpMissing(interpKind="cubic") # interpolate missing values with cubic spline
 
@@ -1114,14 +1108,14 @@ class SuaveStateScanner:
 
         # get label of y-axis
         if self.printVar == 0:
-            data0 = self.Evals
+            data0 = self.E
         elif self.printVar < 0:
-            data0 = self.Pvals[:, :, self.printVar]
+            data0 = self.P[:, :, self.printVar]
         else:
-            data0 = self.Pvals[:, :, self.printVar - 1]
+            data0 = self.P[:, :, self.printVar - 1]
 
-        minE = np.nanmin(self.Evals)
-        maxE = np.nanmax(self.Evals)
+        minE = np.nanmin(self.E)
+        maxE = np.nanmax(self.E)
 
         app.layout = html.Div([
             html.Div([ # create a div for the plot
@@ -1284,11 +1278,11 @@ class SuaveStateScanner:
             # update plot data
             lastEvals, lastPvals = self.prepareSweep()  # save last energies and properties
             if self.printVar == 0:
-                data = self.Evals
+                data = self.E
             elif self.printVar < 0:
-                data = self.Pvals[:, :, self.printVar]
+                data = self.P[:, :, self.printVar]
             else:
-                data = self.Pvals[:, :, self.printVar - 1]
+                data = self.P[:, :, self.printVar - 1]
 
             # create figure
             fig = go.Figure(
@@ -1305,8 +1299,8 @@ class SuaveStateScanner:
             )
 
 
-            self.Evals = copy.deepcopy(lastEvals)
-            self.Pvals = copy.deepcopy(lastPvals)
+            self.E = copy.deepcopy(lastEvals)
+            self.P = copy.deepcopy(lastPvals)
             return fig, f"Sweep {sweep}"
 
         eval_undo = [] # initialize history of energies for undo
@@ -1329,12 +1323,12 @@ class SuaveStateScanner:
                 pval_redo.pop(0)
 
             # add the current state to the redo memory
-            eval_redo.append(self.Evals)
-            pval_redo.append(self.Pvals)
+            eval_redo.append(self.E)
+            pval_redo.append(self.P)
 
             # set the current state to the previous state and remove the previous state from the undo memory
-            self.Evals = copy.deepcopy(eval_undo.pop(-1))
-            self.Pvals = copy.deepcopy(pval_undo.pop(-1))
+            self.E = copy.deepcopy(eval_undo.pop(-1))
+            self.P = copy.deepcopy(pval_undo.pop(-1))
 
             return True
 
@@ -1353,12 +1347,12 @@ class SuaveStateScanner:
                 pval_undo.pop(0)
 
             # add the current state to the undo memory
-            eval_undo.append(self.Evals)
-            pval_undo.append(self.Pvals)
+            eval_undo.append(self.E)
+            pval_undo.append(self.P)
 
             # set the current state to the next state and remove the next state from the redo memory
-            self.Evals = copy.deepcopy(eval_redo.pop(-1))
-            self.Pvals = copy.deepcopy(pval_redo.pop(-1))
+            self.E = copy.deepcopy(eval_redo.pop(-1))
+            self.P = copy.deepcopy(pval_redo.pop(-1))
 
             return True
 
@@ -1371,8 +1365,8 @@ class SuaveStateScanner:
             if len(eval_undo) > 10:
                 eval_undo.pop(0)
                 pval_undo.pop(0)
-            eval_undo.append(copy.deepcopy(self.Evals))
-            pval_undo.append(copy.deepcopy(self.Pvals))
+            eval_undo.append(copy.deepcopy(self.E))
+            pval_undo.append(copy.deepcopy(self.P))
             eval_redo = []
             pval_redo = []
 
@@ -1534,8 +1528,8 @@ class SuaveStateScanner:
                 last_swap_click = swap_clicks # update last swap click
 
                 store_update() # store current state
-                self.Evals[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.Evals[[swap2, swap1], point_bounds[0]:point_bounds[1]]
-                self.Pvals[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.Pvals[[swap2, swap1], point_bounds[0]:point_bounds[1]]
+                self.E[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.E[[swap2, swap1], point_bounds[0]:point_bounds[1]]
+                self.P[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.P[[swap2, swap1], point_bounds[0]:point_bounds[1]]
 
                 ret = make_figure()[0], "Swapped"
                 callback_running = False
@@ -1589,16 +1583,16 @@ class SuaveStateScanner:
             callback_running = True
 
             if save_clicks > last_save_clicks:
-                lastEvals = copy.deepcopy(self.Evals)
-                lastPvals = copy.deepcopy(self.Pvals)
+                lastEvals = copy.deepcopy(self.E)
+                lastPvals = copy.deepcopy(self.P)
 
                 if self.hasMissing and self.interpolate:
                     if self.keepInterp:
                         self.interpMissing(interpKind="cubic")
                 self.saveOrder(isFinalResults=True)
 
-                self.Evals = copy.deepcopy(lastEvals)
-                self.Pvals = copy.deepcopy(lastPvals)
+                self.E = copy.deepcopy(lastEvals)
+                self.P = copy.deepcopy(lastPvals)
                 callback_running = False
                 last_save_clicks = save_clicks
                 return "Order saved"

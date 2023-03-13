@@ -153,7 +153,8 @@ All configurations in the configuration file are optional and are defined as fol
 
 
 * `propList` - A list of the indices of the properties to enforce continuity for. If provided, this should be a list
-  of integers. If this parameter is not provided, the default value 'None' will be used, meaning all properties will be used. (default: None)
+  of integers. The other properties will still be associated with each state despite not being used for reordering. 
+  If this parameter is not provided, the default value 'None' will be used, meaning all properties will be used. (default: None)
 
 
 * `sweepBack` - The 'sweepBack' parameter defines whether the script will sweep backwards through the points

@@ -190,7 +190,7 @@ class SuaveStateScanner:
         self.maxPan = None # maximum pivots of stencil width
         self.stateBounds = None # bounds for states to use
         self.pntBounds = None # bounds for points to use
-        self.propBounds = None # bounds for properties to use
+        self.propList = None # list of properties to use
         self.ignoreProps = False # flag for ignoring properties
         self.sweepBack = False # whether to sweep backwards across points after reordering forwards
         self.eBounds = None # bounds for energies to use
@@ -223,20 +223,25 @@ class SuaveStateScanner:
             self.pntBounds = [0, self.numPoints]
         if self.stateBounds is None:
             self.stateBounds = [0, self.numStates]
-        if self.propBounds is None:
-            self.propBounds = [0, self.numProps]
+        if self.propList is None:
+            self.propList = [i for i in range(self.numProps)]
 
         # check input for bounds. Throw error if bounds are invalid
         if self.pntBounds[0] >= self.pntBounds[1] - 1:
             raise ValueError("Invalid point bounds")
         if self.stateBounds[0] >= self.stateBounds[1] - 1:
             raise ValueError("Invalid state bounds")
-        if self.propBounds[0] >= self.propBounds[1] - 1:
-            raise ValueError("Invalid property bounds")
         if self.eBounds is not None and self.eBounds[0] >= self.eBounds[1] - 1:
             raise ValueError("Invalid energy bounds")
         if self.eWidth is not None and self.eWidth <= 0:
             raise ValueError("Invalid energy width")
+
+        # check if prop list is valid
+        if len(self.propList) == 0:
+            print("No properties to use; ignoring properties", flush=True)
+        for prop in self.propList:
+            if not (0 <= prop < self.numProps):
+                raise ValueError("Invalid property index in propList:", prop)
 
         if self.doShuffle: # shuffle the points before reordering
             self.shuffle_energy()
@@ -254,7 +259,7 @@ class SuaveStateScanner:
         print("futurePnts", self.futurePnts, flush=True)
         print("pntBounds", self.pntBounds, flush=True)
         print("stateBounds", self.stateBounds, flush=True)
-        print("propBounds", self.propBounds, flush=True)
+        print("propList", self.propList, flush=True)
         print("eBounds", self.eBounds, flush=True)
         print("eWidth", self.eWidth, flush=True)
         print("sweepBack", self.sweepBack, flush=True)
@@ -525,10 +530,6 @@ class SuaveStateScanner:
         lobound = self.stateBounds[0]  # lower bound for state
         upbound = self.stateBounds[1]  # upper bound for state
 
-        # create bounds for properties to use for reordering
-        propStart = self.propBounds[0]  # start with the first property
-        propEnd = self.propBounds[1]  # end with the last property
-
         modifiedStates = []
         for pnt in range(start, end, delta):
             sys.stdout.flush()
@@ -564,7 +565,7 @@ class SuaveStateScanner:
                 # compare continuity differences from this state swapped with all other states
                 dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
                 if not self.ignoreProps:
-                    dP = self.generateDerivatives(pnt, self.P[validStates, :, propStart:propEnd], backwards=backwards)
+                    dP = self.generateDerivatives(pnt, self.P[:,:,self.propList][validStates], backwards=backwards)
                 else:
                     dP = np.ones_like(self.P[validStates, :, 0])
 
@@ -591,7 +592,7 @@ class SuaveStateScanner:
                     # nth order finite difference from swapped states
                     dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
                     if not self.ignoreProps:
-                        dP = self.generateDerivatives(pnt, self.P[validStates, :, propStart:propEnd],
+                        dP = self.generateDerivatives(pnt, self.P[:,:,self.propList][validStates],
                                                       backwards=backwards)
                     else:
                         dP = np.ones_like(self.P[validStates, :, 0])
@@ -901,17 +902,13 @@ class SuaveStateScanner:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("The pntBounds provided is invalid. Defaulting to 'None'", flush=True)
                     self.pntBounds = None
-            if "propBounds" in splitLine[0]:
+            if "propList" in splitLine[0]:
                 try:
-                    self.propBounds = stringToList(splitLine[1])
-                    self.propBounds = [int(self.propBounds[0]), int(self.propBounds[1])]
-                    if len(self.propBounds) == 0:
-                        print("The propBounds provided is invalid. Defaulting to 'None'", flush=True)
-                        self.propBounds = None
+                    self.propList = stringToList(splitLine[1])
                 except ValueError:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("The propBounds provided is invalid. Defaulting to 'None'", flush=True)
-                    self.propBounds = None
+                        print("The propList provided is invalid. Defaulting to 'None'", flush=True)
+                    self.propList = None
             if "sweepBack" in splitLine[0]:
                 if "False" in splitLine[1] or "false" in splitLine[1]:
                     self.sweepBack = False
@@ -1141,6 +1138,15 @@ class SuaveStateScanner:
                 dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
 
                 html.Div([  # create a div for sweep, redraw, stop, undo, save
+                    html.Div([  # create a div target variable
+                        html.Div("Print Selection",
+                                 style={'display': 'inline-block', 'width': '100%', 'padding': '0px 0px 0px 0px', 'margin': 'auto'}),
+                        dcc.Dropdown(id="print-var", value=0,
+                                     options=[{'label': "Energy" if i == 0 else "Property " + str(i), 'value': i} for i
+                                              in
+                                              range(self.numProps + 1)]),
+                    ], style={'width': '20%', 'display': 'inline-block', 'padding': '0px 2px 0px 2px',
+                              'margin': 'auto'}),
                     html.Div([ # create a div for reorder
                                 html.Button('Sweep and Reorder', id='button', n_clicks=0),  # make a button to start the animation
                         ], style={'display': 'inline-block', 'width': '15%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
@@ -1159,11 +1165,21 @@ class SuaveStateScanner:
                     html.Div([  # create a div for save
                         html.Button('Save Output', id='save-button', n_clicks=0),  # make a button to start the animation
                     ], style={'display': 'inline-block', 'width': '5%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+                    html.Div([  # make a checklist to control the properties to be reordered
+                        html.Div("Property List",
+                                 style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
+                        dcc.Checklist(id="prop-list",
+                                      options=[{'label': str(i+1), 'value': i} for i in range(self.numProps)],
+                                      value=self.propList,
+                                      labelStyle={'display': 'inline-block', 'width': '20%', 'margin': 'auto'}),
+                    ], style={'width': '15%', 'display': 'inline-block', 'padding': '0px 10px 0px 20px',
+                              'margin': 'auto'}),
                 ], style={'display': 'inline-block', 'width': '40%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+
                 html.Div([  # create a div for swapping two states by index with button
                     html.Div([
                         html.Button('Swap States', id='swap-button', n_clicks=0),  # make a button to start the animation
-                    ], style={'display': 'inline-block', 'width': '20%', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+                    ], style={'display': 'inline-block', 'width': '20%', 'padding': '2px 1px 2px 2px', 'margin': 'auto'}),
                     html.Div([
                         html.Label('State 1:'), # make an input for state 1
                         dcc.Input(id='swap-input1', type='number', value=0, min=0, max=self.numStates - 1, step=1),
@@ -1179,19 +1195,7 @@ class SuaveStateScanner:
                 ], style={'display': 'inline-block', 'width': '40%'}),
             ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px 10px 10px 10px', 'margin': 'auto'}),
 
-            html.Div([  # create a div target variable
-                html.Div("Print Selection", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
-                dcc.Slider(id="print-var", value=0, min=0, max=self.numProps,
-                            marks={0: "Print Energy", self.numProps: "Print Property"},
-                            step=1, tooltip={'always_visible': True, 'placement': 'left'}),
-            ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 15px 50px', 'margin': 'auto'}),
 
-            html.Div([  # make a slider to control the properties to be reordered
-                html.Div("Property Range", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
-                dcc.RangeSlider(id="prop-slider", min=0, max=self.numProps, step=1, value=self.propBounds,
-                                marks={0: "Property Lower Bound", self.numProps: "Property Upper Bound"},
-                                allowCross=False, tooltip={'always_visible': True, 'placement': 'left'})
-            ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 5px 50px', 'margin': 'auto'}),
 
             html.Div([ # make a slider to control the points to be reordered
                 html.Div("Point Range", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),
@@ -1384,12 +1388,12 @@ class SuaveStateScanner:
             [Input('button', 'n_clicks'), Input('point-slider', 'value'), Input('state-slider', 'value'),
              Input('print-var', 'value'), Input('stencil-width', 'value'),
              Input('order-value', 'value'), Input('shuffle-button', 'n_clicks'), Input('backSweep', 'value'),
-             Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('redraw', 'n_clicks'), Input('prop-slider', 'value'),
+             Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('redraw', 'n_clicks'), Input('prop-list', 'value'),
              Input('max-pan', 'value'), Input('energy-width', 'value'), Input('redundant', 'value'), Input('energy-slider', 'value'),
              Input('swap-button', 'n_clicks'), Input('swap-input1', 'value'), Input('swap-input2', 'value'), Input('undo', 'n_clicks'),
              Input('stop-button', 'n_clicks'), Input('redo', 'n_clicks')])
         def update_graph(sweep_clicks, point_bounds, state_bounds, print_var, stencil_width, order, shuffle_clicks, backSweep,
-                         interpolative, numSweeps, redraw_clicks, prop_bounds, maxPan, energyWidth, redundant, energy_bounds,
+                         interpolative, numSweeps, redraw_clicks, prop_list, maxPan, energyWidth, redundant, energy_bounds,
                          swap_clicks, swap1, swap2, undo_clicks, stop_clicks, redo_clicks):
             """
             This function updates the graph
@@ -1405,7 +1409,7 @@ class SuaveStateScanner:
             @param interpolative:  whether to interpolate
             @param numSweeps:  the number of sweeps to do
             @param redraw_clicks:  the number of times the redraw button has been clicked
-            @param prop_bounds:  the bounds of the properties to be plotted
+            @param prop_list: the properties to enforce continuity for
             @param maxPan:  the maximum number of points to pan in stencil
             @param energyWidth:  the width of the energy window
             @param redundant:  whether to use redundant swaps
@@ -1445,7 +1449,7 @@ class SuaveStateScanner:
             # assign values to global variables
             self.pntBounds = point_bounds
             self.stateBounds = state_bounds
-            self.propBounds = prop_bounds
+            self.propList = prop_list
             self.ignoreProps = False
             self.energyBounds = energy_bounds
             self.printVar = int(print_var)
@@ -1479,11 +1483,6 @@ class SuaveStateScanner:
             if self.stateBounds[0] >= self.stateBounds[1] - 1: # if state bounds are invalid
                 self.stateBounds[1] = self.stateBounds[0] + 1 # set state bounds to minimum
                 print("State bounds too small. Using minimum state bounds instead.", flush=True)
-            if self.propBounds[0] >= self.propBounds[1] - 1: # if property bounds are invalid
-                if self.propBounds[0] == 0 and self.propBounds[1] == 0: # if property bounds are 0
-                    self.ignoreProps = True # ignore properties
-                else:
-                    print("Property bounds too small. Using minimum property bounds instead.", flush=True)
             if abs(self.energyBounds[1] - self.energyBounds[0]) <= 1e-6: # if energy bounds are invalid
                 self.energyBounds[1] = self.energyBounds[0] + 1e-6 # set energy bounds to minimum
                 print("Energy bounds too small. Using minimum energy bounds instead.", flush=True)

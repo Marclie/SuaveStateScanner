@@ -1449,7 +1449,7 @@ class SuaveStateScanner:
             # assign values to global variables
             self.pntBounds = point_bounds
             self.stateBounds = state_bounds
-            self.propList = prop_list
+            self.propList = [int(prop) for prop in prop_list]
             self.ignoreProps = False
             self.energyBounds = energy_bounds
             self.printVar = int(print_var)

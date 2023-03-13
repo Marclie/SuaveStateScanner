@@ -905,6 +905,7 @@ class SuaveStateScanner:
             if "propList" in splitLine[0]:
                 try:
                     self.propList = stringToList(splitLine[1])
+                    self.propList = [int(prop) for prop in self.propList]
                 except ValueError:
                     if "None" not in splitLine[1] and "none" not in splitLine[1]:
                         print("The propList provided is invalid. Defaulting to 'None'", flush=True)

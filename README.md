@@ -18,11 +18,11 @@ Introduction
 ------------
 
 SuaveStateScanner is a tool that labels and ensures the continuity of excited state potential energy curves (PECs) in electronic structure calculations. 
-It assigns consistent labels to multiple states along PECs by enforcing the continuity of the excited-state energies and properties (i.e. transition dipole moments, oscillator strengths, and norms of operators) along the reaction coordinate.
+It assigns consistent labels to multiple states along PECs by enforcing the continuity of the excited-state energies and properties (i.e. transition dipole moments, oscillator strengths, norms of operators, etc.) along the reaction coordinate.
 
-This script is particularly useful in cases where excited state energies are often discontinuous with respect to their properties. 
-It helps separate excited states that are close in energy but have different properties. This is useful for identifying and
-plotting the properties of excited states as a function of the reaction coordinate.
+This script is particularly useful in cases where excited state energies are discontinuous with respect to their properties despite having continuous energies. 
+This occurs when excited states are close/degenerate in energy, but have different properties (such as excited states with different symmetry). 
+This script helps label and separate these states along the reaction coordinate.
 
 While SuaveStateScanner is targeted for use in quantum chemistry, it can also be used a general mathematical tool for
 separating and labeling sets of eigenvectors that have similar eigenvalues along some coordinate.

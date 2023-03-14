@@ -1,6 +1,6 @@
 ![Alt text](suave.svg)
 
-[SuaveStateScanner] - A tool for excited electronic state reordering
+[SuaveStateScanner](#suavestatescanner) - A tool for excited electronic state labeling and continuity
 =======================================================================
 
 Table of Contents
@@ -24,7 +24,7 @@ This script is particularly useful in cases where excited state energies are dis
 This occurs when excited states are close/degenerate in energy, but have different properties (such as excited states with different symmetry). 
 This script helps label and separate these states along the reaction coordinate.
 
-While SuaveStateScanner is targeted for use in quantum chemistry, it can also be used a general mathematical tool for
+While SuaveStateScanner is targeted for use in quantum chemistry, it can also be used as a general mathematical tool for
 separating and labeling sets of eigenvectors that have similar eigenvalues along some coordinate.
 
 
@@ -83,26 +83,25 @@ Arguments
 Input File Format
 -----------------
 
-The file is assumed to contain a sequence of points for multiple states with energies and properties. The file will be
-filled with rows corresponding to the reaction coordinate and then by state, with the energy and properties of each state
-printed along the columns. The first column must be the reaction coordinate. The second column must be the state's energy or some other target variable.
-The remaining columns are the properties of the state. 
-
-The number of states is specified by the user.
-
-
+``` csv
     rc1 energy1 property1.1 property1.2 --->
     rc1 energy2 property2.1 property2.2 --->
                     |
                     V
     rc2 energy1 property1.1 property1.2 --->
     rc2 energy2 property2.1 property2.2 --->
+```
+
+The file is assumed to contain a sequence of points for multiple states with energies and properties. The file will be
+filled with rows corresponding to the reaction coordinate and then by state, with the energy and properties of each state
+printed along the columns. The first column must be the reaction coordinate. The second column must be the state's energy or some other target variable.
+The remaining columns are the properties of the state. The number of states is specified by the user.
 
 For data that is not perfectly square, the script will break. If it is not feasible to run further calculations,
 the user can replace missing energies and/or properties with nan or inf. The script will ignore these points for 
-calculating finite differences by interpolating over them (A warning message will indicate this). The final output will 
-keep the nan or inf values and will not interpolate over them. However, the user should be aware that the script will 
-not effectively reorder states if there are too many missing.
+calculating finite differences by interpolating over them (A warning message will indicate this). The final printed 
+output will keep the nan or inf values in their corresponding locations and will not interpolate over them. 
+However, the user should be aware that the script will still not effectively reorder states if there are too many nan or inf values used.
 
 Configuration File Format
 -------------------------

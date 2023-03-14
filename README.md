@@ -1,7 +1,8 @@
 ![Alt text](suave.svg)
 
-[SuaveStateScanner](#suavestatescanner) - A tool for excited electronic state labeling and continuity
+[SuaveStateScanner](#introduction) - A tool for excited electronic state labeling and continuity
 =======================================================================
+[SuaveStateScanner]:(#introduction)
 
 Table of Contents
 -----------------
@@ -17,14 +18,14 @@ Table of Contents
 Introduction
 ------------
 
-[SuaveStateScanner](#suavestatescanner) is a tool that labels and ensures the continuity of excited state potential energy curves (PECs) in electronic structure calculations. 
+[SuaveStateScanner](#introduction) is a tool that labels and ensures the continuity of excited state potential energy curves (PECs) in electronic structure calculations. 
 It assigns consistent labels to multiple states along PECs by enforcing the continuity of the excited-state energies and properties (i.e. transition dipole moments, oscillator strengths, norms of operators, etc.) along the reaction coordinate.
 
 This script is particularly useful in cases where excited state energies are discontinuous with respect to their properties despite having continuous energies. 
 This occurs when excited states are close/degenerate in energy, but have different properties (such as excited states with different symmetry). 
 This script helps label and separate these states along the reaction coordinate.
 
-While [SuaveStateScanner](#suavestatescanner) is targeted for use in quantum chemistry, it can also be used as a general mathematical tool for
+While [SuaveStateScanner](#introduction) is targeted for use in quantum chemistry, it can also be used as a general mathematical tool for
 separating and labeling sets of eigenvectors that have similar eigenvalues along some coordinate.
 
 
@@ -50,7 +51,7 @@ During the reordering procedure, the files `checkpoint.csv` and `temp_out.csv` a
 The `checkpoint.csv` file stores all the state information for each point and can be used to restart the script. 
 The `temp_out.csv` file stores the output at any given iteration for the states, which can be used to track the progress of the reordering.
 
-[SuaveStateScanner](#suavestatescanner) can also be called directly from python with the following:
+[SuaveStateScanner](#introduction) can also be called directly from python with the following:
 ``` python
     from suave_state_scanner.py import SuaveStateScanner
     scanner = SuaveStateScanner(infile="input.csv", outfile="output.csv", 
@@ -220,14 +221,14 @@ All configurations in the configuration file are optional and are defined as fol
 
 * `makePos` - Whether to make all extracted properties positive before sorting according to increasing energy
   eigenvalue along each curve/trajectory/reaction path segment sampled during electronic structure calculations or other
-  types of calculations from which data was obtained as input to the [SuaveStateScanner](#suavestatescanner) program. Making properties positive
-  can sometimes improve performance on data processed by [SuaveStateScanner](#suavestatescanner) as input but isn't strictly necessary so
+  types of calculations from which data was obtained as input to the [SuaveStateScanner](#introduction) program. Making properties positive
+  can sometimes improve performance on data processed by [SuaveStateScanner](#introduction) as input but isn't strictly necessary so
   default value is False. (default: False)
 
 
 * `doShuffle` - Whether to shuffle order or energy eigenvalues along each curve sampled from electronic
   structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed
-  by [SuaveStateScanner](#suavestatescanner) as input but isn't strictly necessary so default value is False. (default: False)
+  by [SuaveStateScanner](#introduction) as input but isn't strictly necessary so default value is False. (default: False)
 
 
 * `redundantSwaps` - Whether to allow redundant swaps. If set to False, a state will only be considered for swapping with higher lying states. 
@@ -252,7 +253,7 @@ If your data is not converging and/or the order of states is not accurate, there
 
 - Experiment with using different properties to describe each state. Some properties will contribute more to the calculation of the finite differences than others, or some properties may be less continuous than others at each point (i.e. x-, y- transition dipoles that can mix arbitrarily for c1-symmetry calculations). It may help to normalize all properties for each state so properties are treated on equal footing or enable the `makePos` flag in the config file to eliminate dependence on sign.
 
-- Try shuffling the order of energy eigenvalues for each state along each point sampled from electronic structure calculations or other types of calculations. This can sometimes improve performance on data processed by [SuaveStateScanner](#suavestatescanner) as input, where parameters from the initial configuration prevents states from being swapped. To do this, simply set the `doShuffle` parameter to True in the config file.
+- Try shuffling the order of energy eigenvalues for each state along each point sampled from electronic structure calculations or other types of calculations. This can sometimes improve performance on data processed by [SuaveStateScanner](#introduction) as input, where parameters from the initial configuration prevents states from being swapped. To do this, simply set the `doShuffle` parameter to True in the config file.
 
 - Consider sorting the states in batches with different bounds for the points `pntBounds`, states `stateBounds`, and energies (`eBounds` and/or `eWidth`). This can help to identify the correct order of states for each batch, which can then be used to sort the entire data set.
   - For example, if you have a data set with 1000 points, you can sort the first 100 points with `pntBounds=[0, 99]` and then sort the next 100 points with `pntBounds=[100, 199]` and so on. This will help to identify the correct order of states for each batch, which can then be used to sort the entire data set.
@@ -269,7 +270,7 @@ Make sure to plot the guess ordering at different iterations from the 'tempOutpu
 How to cite
 -----------
 
-When using [SuaveStateScanner](#suavestatescanner) for research projects, please cite:
+When using [SuaveStateScanner](#introduction) for research projects, please cite:
 
 ```
 @misc{SuaveStateScanner,

@@ -39,7 +39,8 @@ The required arguments are `in_file`, the input data file, `out_file`, the file 
 
 The optional argument `-c CONFIG_PATH` is the path to the configuration file. If not provided, default values will be used.
 
-The script will generate the new energy ordering from `in_file` to `out_file`, with the reaction coordinate as the first row. During the reordering procedure, the files "tempInput.csv" and "tempOutput.csv" are generated. The "tempInput.csv" file stores all the state information for each point and can be used to restart the script. The "tempOutput.csv" file stores the output at any given iteration for the states, which can be used to track the progress of the reordering.
+The script will generate the new energy ordering from `in_file` to `out_file`, with the reaction coordinate as the first row. 
+During the reordering procedure, the files `checkpoint.csv` and `temp_out.csv` are generated. The "tempInput.csv" file stores all the state information for each point and can be used to restart the script. The "tempOutput.csv" file stores the output at any given iteration for the states, which can be used to track the progress of the reordering.
 
 
 Arguments

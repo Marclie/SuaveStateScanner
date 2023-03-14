@@ -784,13 +784,13 @@ class SuaveStateScanner:
         @brief This function will save the state information of a reorder scan for a future run of this script
         @param isFinalResults: A boolean that determines if the final results are being saved
 
-        @return: The energy and properties for each state at each point written to a file "tempInput.csv"
+        @return: The energy and properties for each state at each point written to a file "checkpoint.csv"
         """
 
         tempInput = zeros((self.P.shape[0] * self.P.shape[1], self.P.shape[2] + 2))
         combineVals(self.E, self.P, self.allPnts, tempInput)
 
-        savetxt("tempInput.csv", tempInput, fmt='%20.12f')
+        savetxt("checkpoint.csv", tempInput, fmt='%20.12f')
 
         newCurvesList = []
         for pnt in range(self.allPnts.shape[0]):
@@ -803,7 +803,7 @@ class SuaveStateScanner:
 
         newCurves = stack(newCurvesList, axis=1)
         newCurves = insert(newCurves, 0, self.allPnts, axis=0)
-        savetxt('tempOutput.csv', newCurves, fmt='%20.12f')
+        savetxt('temp_out.csv', newCurves, fmt='%20.12f')
 
 
         if isFinalResults: # save the final results
@@ -1453,7 +1453,7 @@ class SuaveStateScanner:
                 self.E[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.E[[swap2, swap1], point_bounds[0]:point_bounds[1]]
                 self.P[[swap1, swap2], point_bounds[0]:point_bounds[1]] = self.P[[swap2, swap1], point_bounds[0]:point_bounds[1]]
 
-                ret = make_figure()[0], "Swapped"
+                ret = make_figure()[0], "Swapped States {} and {} at Points {} to {}".format(swap1, swap2, self.allPnts[point_bounds[0]], self.allPnts[point_bounds[1]-1])
                 callback_running = False
                 return ret
             elif remove_clicks > last_remove_click: # remove button clicked

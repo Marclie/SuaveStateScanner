@@ -3,5 +3,4 @@ numba
 numpy
 plotly
 scipy
-json
 argparse

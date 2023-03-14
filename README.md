@@ -66,7 +66,7 @@ Arguments
 ---------
 
 * `infile` - The name of the input file. This file should contain a sequence of points for multiple states with energies
-  and properties.
+  and properties along a reaction coordinate. See the [Input File Format](#input-file-format) section for more details.
 
 
 * `outfile` - The name of the output file. This file will be filled with rows corresponding to the reaction coordinate
@@ -77,7 +77,8 @@ Arguments
 
 
 * `configPath` (optional) - This is the path to a configuration file that will set up parameters for the stencils used
-  to enforce continuity of states. If not specified, default values will be set (default: None)
+  to enforce continuity of states. If not specified, default values will be set. 
+  See the [Configuration File Format](#configuration-file-format) section for more details. (default: None)
 
 Input File Format
 -----------------
@@ -105,6 +106,7 @@ not effectively reorder states if there are too many missing.
 
 Configuration File Format
 -------------------------
+
 The configuration file is in JSON format. The following is an example configuration file:
 ``` json
     {
@@ -144,9 +146,7 @@ All configurations in the configuration file are optional and are defined as fol
 * `interactive` - If this is set to True, the script will run in interactive mode. This will allow the user to
   perform reordering steps on the fly, modify bounds for states and points at each step, and save the current state. It
   will also allow the user to redraw states to plot different properties. This is useful for debugging, manipulating, 
-  and for visualizing the reordering procedure. This setting is strongly recommended for debugging, however, it is not
-  is set to False by default because it is slower than the default mode, and it requires the user to have plotly and Dash
-  installed. (default: False)
+  and for visualizing the reordering procedure. This setting is strongly recommended for debugging. (default: True)
 
 
 * `orders` - The 'orders' parameter defines the orders of derivatives desired for computation. This parameter must be a list of integers.
@@ -155,7 +155,7 @@ All configurations in the configuration file are optional and are defined as fol
 
 * `width` - The 'width' parameter defines the width of the stencil used for finite differences.
    This parameter is optional and must be a positive integer greater than the max order.
-   If this parameter is not provided, the default value '8' or 'max(orders)+3' will be used. (default: 8)
+   If this parameter is not provided, the default value '3' or 'max(orders)+3' will be used. (default: 3)
 
 
 * `futurePnts` - The 'futurePnts' parameter defines the number of points from the right of the center that is included in the stencils.
@@ -231,9 +231,9 @@ All configurations in the configuration file are optional and are defined as fol
   by SuaveStateScanner as input but isn't strictly necessary so default value is False. (default: False)
 
 
-* `redundantSwaps` - Whether to allow redundant swaps. The current algorithm will only swap the current state with higher lying states. 
-  This is done for performance reasons since the lower lying states should already be in the correct order after a few iterations. However,
-  if the user wants to allow the redundant swaps for troubleshooting purposes, this parameter can be set to True. (default: False)
+* `redundantSwaps` - Whether to allow redundant swaps. If set to False, a state will only be considered for swapping with higher lying states. 
+  This improves performance since fewer states are incorporated into the derivatives. Lower lying states should already be in the correct order after a few iterations. 
+  However, depending on the data, this may not be the case and the script may not converge. (default: True)
 
 Troubleshooting
 ------------

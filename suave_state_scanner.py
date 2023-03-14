@@ -833,7 +833,7 @@ class SuaveStateScanner:
         with open(self.configPath, 'r') as configer:
             data = json.load(configer)
             self.printVar = data.get("printVar", 0)
-            self.interactive = data.get("interactive", False)
+            self.interactive = data.get("interactive", True)
             self.maxiter = data.get("maxiter", 1000)
             self.orders = data.get("orders", [1])
             self.width = data.get("width", 8)
@@ -1021,6 +1021,9 @@ class SuaveStateScanner:
                         html.Button('Abort', id='stop-button', n_clicks=0,
                                     style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
                                            'font-size': '14px', 'width': '100%'}),
+                        html.Button('Reset', id='reset-button', n_clicks=0,
+                                    style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                             'font-size': '14px', 'width': '100%'}),
                     ], style={'display': 'inline-block'}),
                 ], style={'display': 'inline-block', 'padding': '10px'}),
                 html.Div([  # Save
@@ -1064,6 +1067,20 @@ class SuaveStateScanner:
                         # make a button to start the animation
                     ], style={'display': 'inline-block', 'padding': '2px 2px 2px 50px', 'margin': 'auto'}),
                 ], style={'display': 'inline-block', 'padding': '2px 2px 2px 50px', 'margin': 'auto'}),
+            ], style={'display': 'inline-block', 'width': '100%'}),
+
+            html.Div([  # create a div for removing state at point
+                html.Div([
+                    html.Button('Remove State Info', id='remove-button', n_clicks=0,
+                                style={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '14px',
+                                       'padding': '10px', 'width': '100%'}),  # make a button to start the animation
+                ], style={'display': 'inline-block', 'padding': '2px 10px 2px 2px', 'margin': 'auto'}),
+                html.Div([
+                    html.Label('State:'),  # make an input for state to remove
+                    dcc.Input(id='remove-state-input', type='number', value=0, min=0, max=self.numStates - 1, step=1,
+                              style={'background-color': '#FFFFFF', 'color': '#222222', 'font-size': '14px',
+                                     'padding': '10px', 'width': '100%'}),
+                ], style={'display': 'inline-block', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
             ], style={'display': 'inline-block', 'width': '100%'}),
 
             dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
@@ -1194,6 +1211,8 @@ class SuaveStateScanner:
         pval_undo = [] # initialize history of properties for undo
         eval_redo = [] # initialize memory of energies for redo
         pval_redo = [] # initialize memory of properties for redo
+        original_eval = copy.deepcopy(self.E) # save the original energies
+        original_pval = copy.deepcopy(self.P) # save the original properties
 
         def undo_callback():
             """
@@ -1265,6 +1284,8 @@ class SuaveStateScanner:
         last_stop_click = 0 # initialize last stop click
         last_undo_click = 0 # initialize last undo click
         last_redo_click = 0 # initialize last redo click
+        last_remove_click = 0 # initialize last remove click
+        last_reset_click = 0 # initialize last reset click
         callback_running = False # initialize callback running check
         @app.callback(
             [Output('graph', 'figure'), Output('loading-reorder-out', 'children')],
@@ -1274,10 +1295,11 @@ class SuaveStateScanner:
              Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('redraw', 'n_clicks'), Input('prop-list', 'value'),
              Input('max-pan', 'value'), Input('energy-width', 'value'), Input('redundant', 'value'), Input('energy-slider', 'value'),
              Input('swap-button', 'n_clicks'), Input('swap-input1', 'value'), Input('swap-input2', 'value'), Input('undo', 'n_clicks'),
-             Input('stop-button', 'n_clicks'), Input('redo', 'n_clicks')])
+             Input('stop-button', 'n_clicks'), Input('redo', 'n_clicks'), Input('remove-button', 'n_clicks'), Input('remove-state-input', 'value'),
+             Input('reset-button', 'n_clicks')])
         def update_graph(sweep_clicks, point_bounds, state_bounds, print_var, stencil_width, order, shuffle_clicks, backSweep,
                          interpolative, numSweeps, redraw_clicks, prop_list, maxPan, energyWidth, redundant, energy_bounds,
-                         swap_clicks, swap1, swap2, undo_clicks, stop_clicks, redo_clicks):
+                         swap_clicks, swap1, swap2, undo_clicks, stop_clicks, redo_clicks, remove_clicks, remove_state, reset_clicks):
             """
             This function updates the graph
 
@@ -1306,8 +1328,8 @@ class SuaveStateScanner:
             @return: the figure to be plotted
             """
             nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, last_swap_click
-            nonlocal last_undo_click, last_stop_click, last_redo_click
-            nonlocal eval_undo, pval_undo, eval_redo, pval_redo
+            nonlocal last_undo_click, last_stop_click, last_redo_click, last_remove_click, last_reset_click
+            nonlocal eval_undo, pval_undo, eval_redo, pval_redo, original_eval, original_pval
             nonlocal sweep, callback_running
 
             if stop_clicks > last_stop_click: # if stop button has been clicked
@@ -1323,8 +1345,11 @@ class SuaveStateScanner:
                 last_shuffle_click = shuffle_clicks
                 last_redraw_click = redraw_clicks
                 last_swap_click = swap_clicks
-                last_undo_click = undo_clicks
                 last_stop_click = stop_clicks
+                last_undo_click = undo_clicks
+                last_redo_click = redo_clicks
+                last_remove_click = remove_clicks
+                last_reset_click = reset_clicks
                 raise PreventUpdate # prevent update
 
             callback_running = True # set callback running to true
@@ -1333,13 +1358,13 @@ class SuaveStateScanner:
             self.pntBounds = point_bounds
             self.stateBounds = state_bounds
             self.propList = [int(prop) for prop in prop_list]
-            self.ignoreProps = False
-            self.energyBounds = energy_bounds
+            self.ignoreProps = len(self.propList) == 0 # if no properties are selected, ignore properties
+            self.energyBounds = [float(energy) for energy in energy_bounds]
             self.printVar = int(print_var)
             self.width = int(stencil_width)
             self.orders = [int(order)] # only use one order for now
-            self.interpolate = interpolative
-            self.redundantSwaps = redundant
+            self.interpolate = bool(interpolative)
+            self.redundantSwaps = bool(redundant)
             self.maxPan = int(maxPan)
             self.energyWidth = float(energyWidth)
 
@@ -1363,11 +1388,19 @@ class SuaveStateScanner:
             if self.pntBounds[0] >= self.pntBounds[1] - 1: # if point bounds are invalid
                 self.pntBounds[1] = self.pntBounds[0] + 1 # set point bounds to minimum
                 print("Point bounds too small. Using minimum point bounds instead.", flush=True)
+            if self.pntBounds[1] <= self.pntBounds[0] + 1: # if point bounds are invalid
+                self.pntBounds[0] = self.pntBounds[1] - 1 # set point bounds to minimum
+                print("Point bounds too small. Using minimum point bounds instead.", flush=True)
             if self.stateBounds[0] >= self.stateBounds[1] - 1: # if state bounds are invalid
                 self.stateBounds[1] = self.stateBounds[0] + 1 # set state bounds to minimum
                 print("State bounds too small. Using minimum state bounds instead.", flush=True)
+            if self.stateBounds[1] <= self.stateBounds[0] + 1: # if state bounds are invalid
+                self.stateBounds[0] = self.stateBounds[1] - 1 # set state bounds to minimum
             if abs(self.energyBounds[1] - self.energyBounds[0]) <= 1e-6: # if energy bounds are invalid
-                self.energyBounds[1] = self.energyBounds[0] + 1e-6 # set energy bounds to minimum
+                min_bound = min(self.energyBounds[0], self.energyBounds[1]) # get minimum energy bound
+                max_bound = max(self.energyBounds[0], self.energyBounds[1]) # get maximum energy bound
+                self.energyBounds[0] = min_bound - 1e-6 # set minimum energy bound
+                self.energyBounds[1] = max_bound + 1e-6 # set maximum energy bound
                 print("Energy bounds too small. Using minimum energy bounds instead.", flush=True)
 
 
@@ -1397,6 +1430,13 @@ class SuaveStateScanner:
                     ret = no_update, "Nothing to redo"
                 callback_running = False
                 return ret
+            elif reset_clicks > last_reset_click: # reset button clicked
+                last_reset_click = reset_clicks
+                self.E = copy.deepcopy(original_eval)
+                self.P = copy.deepcopy(original_pval)
+                ret = make_figure()[0], "Reset to Initial Data"  # update figure
+                callback_running = False  # set callback running to false
+                return ret  # return figure
             elif shuffle_clicks > last_shuffle_click: # shuffle button clicked
                 last_shuffle_click = shuffle_clicks # update last shuffle click
 
@@ -1416,10 +1456,18 @@ class SuaveStateScanner:
                 ret = make_figure()[0], "Swapped"
                 callback_running = False
                 return ret
+            elif remove_clicks > last_remove_click: # remove button clicked
+                last_remove_click = remove_clicks # update last remove click
+                remove_state = int(remove_state) # get state to remove
+                self.E[remove_state, point_bounds[0]:point_bounds[1]] = np.nan # set energy to nan
+                self.P[remove_state, point_bounds[0]:point_bounds[1],prop_list] = np.nan # set properties to nan
+                self.hasMissing = True # set has missing to true
+                ret = make_figure()[0], "Removed State {} at Points {} to {} for selected properties".format(remove_state, self.allPnts[point_bounds[0]], self.allPnts[point_bounds[1]-1])
+                callback_running = False
+                return ret
             else: # otherwise, do nothing
                 callback_running = False
                 return no_update, no_update
-
 
             store_update() # store current state
 

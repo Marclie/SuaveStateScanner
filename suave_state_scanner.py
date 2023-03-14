@@ -22,7 +22,7 @@ import time
 
 import numba
 import numpy as np
-from numba import njit, prange, set_num_threads
+from numba import njit, prange
 from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
 import scipy.interpolate as interpolate
 
@@ -31,16 +31,16 @@ from nstencil import makeStencil
 @njit(parallel=True, fastmath=False, nogil=True, cache=True)
 def approxDeriv(F, diff, center, stencil, alphas, sN):
     """
-    @brief This function approximates the n-th order derivatives of a the energies and properties
+    This function approximates the n-th order derivatives of a the energies and properties
            at a point for a given stencil size.
-    @param F: the energies and properties of the state to be reordered and each state above it across each point
-    @param diff: the finite differences of the energies and properties at the center point
-    @param center: the index of the point to approximate the derivatives at
-    @param stencil: the stencil to use in the finite difference approximation
-    @param alphas: the coefficients of the stencil to use in the finite difference approximation
-    @param sN: the size of the stencil to use in the finite difference approximation
+    :param F: the energies and properties of the state to be reordered and each state above it across each point
+    :param diff: the finite differences of the energies and properties at the center point
+    :param center: the index of the point to approximate the derivatives at
+    :param stencil: the stencil to use in the finite difference approximation
+    :param alphas: the coefficients of the stencil to use in the finite difference approximation
+    :param sN: the size of the stencil to use in the finite difference approximation
 
-    @return: the n-th order finite differences of the energies and properties at the center point with the current stencil
+    :return the n-th order finite differences of the energies and properties at the center point with the current stencil
     """
 
     # evaluate finite difference terms for each state
@@ -51,10 +51,10 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
 @njit(parallel=True, fastmath=False, nogil=True, cache=True)
 def getMetric(dE, dP):
     """
-    @brief This function computes the ordering metric for a given set of finite differences.
-    @param dE: the finite differences of the energies at the center point (shape: (numStates))
-    @param dP: the finite differences of the properties at the center point (shape: (numStates, numFeatures))
-    @return: the ordering metric for the given finite differences
+    This function computes the ordering metric for a given set of finite differences.
+    :param dE: the finite differences of the energies at the center point (shape: (numStates))
+    :param dP: the finite differences of the properties at the center point (shape: (numStates, numFeatures))
+    :return the ordering metric for the given finite differences
     """
 
     return (dE @ dP).sum()
@@ -62,14 +62,14 @@ def getMetric(dE, dP):
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
     """
-    @brief This function will calculate the difference in the energy from a previous reordering to the current order
-    @param Evals: The energy values for the current order
-    @param Pvals: The properties for the current order
-    @param stateEvals: The energy values for the previous order
-    @param statePvals: The properties for the previous order
-    @param state: The state that is being compared
+    This function will calculate the difference in the energy from a previous reordering to the current order
+    :param Evals: The energy values for the current order
+    :param Pvals: The properties for the current order
+    :param stateEvals: The energy values for the previous order
+    :param statePvals: The properties for the previous order
+    :param state: The state that is being compared
 
-    @return delMax: The maximum difference between the current and previous order
+    :return delMax: The maximum difference between the current and previous order
     """
 
     delEval = Evals[state] - stateEvals[state]
@@ -80,13 +80,13 @@ def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def combineVals(Evals, Pvals, allPnts, tempInput):
     """
-    @brief This function will reformat the state information for saving
-    @param Evals: The energy values for the current order
-    @param Pvals: The properties for the current order
-    @param allPnts: The points that are being evaluated
-    @param tempInput: The input file for the current run
+    This function will reformat the state information for saving
+    :param Evals: The energy values for the current order
+    :param Pvals: The properties for the current order
+    :param allPnts: The points that are being evaluated
+    :param tempInput: The input file for the current run
 
-    @return: The energy and properties for each state at each point
+    :return The energy and properties for each state at each point
     """
 
     numPoints = allPnts.shape[0]
@@ -102,9 +102,9 @@ def combineVals(Evals, Pvals, allPnts, tempInput):
 @njit(parallel=True, fastmath=False, nogil=True, cache=True)
 def mergediff(diff):
     """
-    @brief This function will merge the finite differences for the energy and properties
-    @param diff: The finite differences for the energy and properties
-    @return: The merged finite differences
+    This function will merge the finite differences for the energy and properties
+    :param diff: The finite differences for the energy and properties
+    :return The merged finite differences
     """
     return np.absolute(diff.sum(axis=1))
 
@@ -112,19 +112,19 @@ def mergediff(diff):
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eLow, eHigh, eWidth, hasEBounds, hasEWidth):
     """
-    @brief This function will build the valid array for the current point
-    @param validArray: The array of valid states
-    @param Evals: The energy values for the current order
-    @param lobound: The lower bound for the current point
-    @param pnt: The current point
-    @param ref: The reference point
-    @param upbound: The upper bound for the current point
-    @param eLow: The lower bound for the energy
-    @param eHigh: The upper bound for the energy
-    @param eWidth: The energy width for the current point
-    @param hasEBounds: Whether the energy bounds are being used
-    @param hasEWidth: Whether the energy width is being used
-    @return: The valid array for the current point
+    This function will build the valid array for the current point
+    :param validArray: The array of valid states
+    :param Evals: The energy values for the current order
+    :param lobound: The lower bound for the current point
+    :param pnt: The current point
+    :param ref: The reference point
+    :param upbound: The upper bound for the current point
+    :param eLow: The lower bound for the energy
+    :param eHigh: The upper bound for the energy
+    :param eWidth: The energy width for the current point
+    :param hasEBounds: Whether the energy bounds are being used
+    :param hasEWidth: Whether the energy width is being used
+    :return The valid array for the current point
     """
 
     # set all states at points that are not valid to False
@@ -144,25 +144,25 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eLow, eHigh, 
 def stringToList(string):
     """
     this function will convert a string to a list of integers
-    @return:
+    :return
     """
     return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
 
 
 class SuaveStateScanner:
     """
-        @brief: This class takes a sequence of points for multiple states with their energies and properties
+        This class takes a sequence of points for multiple states with their energies and properties
         and reorders them such that the energies and properties are continuous
 
         Parameters
         ----------
-        @param infile : str
+        :param infile : str
             The name of the input file
-        @param outfile : str
+        :param outfile : str
             The name of the output file
-        @param numStates : int
+        :param numStates : int
             The number of states
-        @param configPath : The path of the configuration file for setting stencil properties
+        :param configPath : The path of the configuration file for setting stencil properties
         """
     def __init__(self, infile, outfile, numStates, configPath=None):
         print("\nInput File:", infile, flush=True)
@@ -295,11 +295,11 @@ class SuaveStateScanner:
 
     def generateDerivatives(self, center, F, backwards=False):
         """
-        @brief This function approximates the n-th order derivatives of the energies and properties at a point.
-        @param center: The index of the center point
-        @param F: the energies and properties of the state to be reordered and each state above it across each point
-        @param backwards: whether to approximate the derivatives backwards or forwards from the center
-        @return: the n-th order finite differences of the energies and properties at the center point
+        This function approximates the n-th order derivatives of the energies and properties at a point.
+        :param center: The index of the center point
+        :param F: the energies and properties of the state to be reordered and each state above it across each point
+        :param backwards: whether to approximate the derivatives backwards or forwards from the center
+        :return the n-th order finite differences of the energies and properties at the center point
         """
         bounds = self.pntBounds
         if self.orders is None:
@@ -384,13 +384,13 @@ class SuaveStateScanner:
 
         if self.hasMissing and not self.interpolate:
             # interpolate derivatives at missing points (not interpolating energies or properties)
-            diff = self.interpolateDerivatives(diff, sN)
+            diff = self.interpolateDerivatives(diff)
         return mergediff(diff)
 
 
     def sortEnergies(self):
         """
-        @brief This function sorts the energies and properties of the state such that the first point is in ascending energy order.
+        This function sorts the energies and properties of the state such that the first point is in ascending energy order.
         """
         idx = self.E[:, 0].argsort()
         self.E[:] = self.E[idx]
@@ -398,9 +398,9 @@ class SuaveStateScanner:
 
     def prepareSweep(self):
         """
-        @brief: This function prepares the states for a sweep by saving the current state of the energies and properties
+        This function prepares the states for a sweep by saving the current state of the energies and properties
                 and creating a map of the states to their original order
-        @return: lastEvals, lastPvals: the energies and properties of the states in their original order
+        :return lastEvals, lastPvals: the energies and properties of the states in their original order
         """
 
         # copy initial state info
@@ -427,12 +427,12 @@ class SuaveStateScanner:
 
     def analyzeSweep(self, lastEvals, lastPvals):
         """
-        @brief: This function analyzes the results of a sweep to determine if the states have converged
-        @param lastEvals:  the energies and properties of the states in their original order
-        @param lastPvals:  the energies and properties of the states in their original order
+        This function analyzes the results of a sweep to determine if the states have converged
+        :param lastEvals:  the energies and properties of the states in their original order
+        :param lastPvals:  the energies and properties of the states in their original order
 
-        @return: delMax: the maximum change in the energies and properties of the states
-        @return: E, P: the energies and properties of the states in their new order
+        :return delMax: the maximum change in the energies and properties of the states
+        :return E, P: the energies and properties of the states in their new order
         """
         # reset states to original order with missing values
         self.E = copy.deepcopy(lastEvals)
@@ -453,8 +453,9 @@ class SuaveStateScanner:
     def sweepState(self, state, sweep, backward=False):
         """
         This function sweeps through the states, performing the reordering.
-        @param state: the state to be reordered
-        @param sweep: current sweep number (used for printing)
+        :param state: the state to be reordered
+        :param sweep: current sweep number (used for printing)
+        :param backward: whether to sweep backwards or forwards through the points (default: False)
         """
 
         if self.halt:
@@ -505,7 +506,7 @@ class SuaveStateScanner:
         :param state: current state
         :param sweep: current sweep
         :param backwards: if True, sweep backwards
-        :return: List of states that were modified
+        :return List of states that were modified
         """
 
         if self.halt:
@@ -644,11 +645,11 @@ class SuaveStateScanner:
     def findValidStates(self, lobound, pnt, ref, upbound):
         """
         Find states that are valid for the current point
-        @param lobound: lower bound for states
-        @param pnt: current point
-        @param ref: current state
-        @param upbound: upper bound for states
-        @return validStates : list of valid states
+        :param lobound: lower bound for states
+        :param pnt: current point
+        :param ref: current state
+        :param upbound: upper bound for states
+        :return validStates : list of valid states
         """
         validArray = np.zeros(self.numStates, dtype=bool)
         validArray.fill(True)  # set all states to be valid
@@ -701,12 +702,11 @@ class SuaveStateScanner:
             self.E[i, :] = interpolate.interp1d(self.allPnts[idx], self.E[i, idx], kind=interpKind, fill_value='extrapolate')(self.allPnts)
         print("Done\n", flush=True)
 
-    def interpolateDerivatives(self, diff, sN):
+    def interpolateDerivatives(self, diff):
         """
         Interpolate the derivatives using the given stencil
-        @param diff: derivatives
-        @param sN: stencil size
-        @return: interpolated derivatives
+        :param diff: derivatives
+        :return interpolated derivatives
         """
 
         # interpolate the derivatives
@@ -745,8 +745,8 @@ class SuaveStateScanner:
     # This function will randomize the state ordering for each point
     def shuffle_energy(self):
         """
-        @brief This function will randomize the state ordering for each point, except the first point
-        @return: The states with randomized energy ordering
+        This function will randomize the state ordering for each point, except the first point
+        :return The states with randomized energy ordering
         """
 
         for pnt in range(self.pntBounds[0], self.pntBounds[1]):
@@ -765,10 +765,10 @@ class SuaveStateScanner:
     # this function loads the state information of a reorder scan from a previous run of this script
     def loadPrevRun(self, numStates, numPoints, numColumns):
         """
-        @brief This function will load the state information of a reorder scan from a previous run of this script
-        @param numStates: The number of states
-        @param numPoints: The number of points
-        @param numColumns: The number of columns in the file
+        This function will load the state information of a reorder scan from a previous run of this script
+        :param numStates: The number of states
+        :param numPoints: The number of points
+        :param numColumns: The number of columns in the file
         """
 
         Ecurves = genfromtxt('E.csv')
@@ -781,10 +781,10 @@ class SuaveStateScanner:
 
     def saveOrder(self, isFinalResults = False):
         """
-        @brief This function will save the state information of a reorder scan for a future run of this script
-        @param isFinalResults: A boolean that determines if the final results are being saved
+        This function will save the state information of a reorder scan for a future run of this script
+        :param isFinalResults: A boolean that determines if the final results are being saved
 
-        @return: The energy and properties for each state at each point written to a file "checkpoint.csv"
+        :return The energy and properties for each state at each point written to a file "checkpoint.csv"
         """
 
         tempInput = zeros((self.P.shape[0] * self.P.shape[1], self.P.shape[2] + 2))
@@ -825,7 +825,7 @@ class SuaveStateScanner:
 
     def applyConfig(self):
         """
-        @brief This function will set parameters from the configuration file
+        This function will set parameters from the configuration file
         """
         if self.configPath is None:
             return
@@ -911,7 +911,7 @@ class SuaveStateScanner:
 
     def run(self):
         """
-        @brief: This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
+        This function will take a sequence of points for multiple states with energies and properties and reorder them such that the energies and properties are continuous
         """
         startArrange = time.time() # start timer
 
@@ -1174,7 +1174,7 @@ class SuaveStateScanner:
         def make_figure():
             """
             This function creates the figure to be plotted
-            @return: fig: the figure to be plotted
+            :return fig: the figure to be plotted
             """
             nonlocal sweep
 
@@ -1217,7 +1217,7 @@ class SuaveStateScanner:
         def undo_callback():
             """
             This function undoes the last sweep
-            @return: Boolean: True if successful, False otherwise
+            :return Boolean: True if successful, False otherwise
             """
             nonlocal eval_undo, pval_undo, eval_redo, pval_redo
             if len(eval_undo) < 1: # if there is nothing to undo
@@ -1241,7 +1241,7 @@ class SuaveStateScanner:
         def redo_callback():
             """
             This function redoes the last sweep
-            @return: None
+            :return None
             """
             nonlocal eval_undo, pval_undo, eval_redo, pval_redo
             if len(eval_redo) < 1: # if there is nothing to redo
@@ -1265,7 +1265,7 @@ class SuaveStateScanner:
         def store_update():
             """
             This function stores the current state of the plot
-            @return: None
+            :return None
             """
             nonlocal eval_undo, pval_undo, eval_redo, pval_redo
             if len(eval_undo) > 10:
@@ -1303,29 +1303,29 @@ class SuaveStateScanner:
             """
             This function updates the graph
 
-            @param sweep_clicks:  the number of times the button has been clicked
-            @param point_bounds:  the bounds of the points to be plotted
-            @param state_bounds:  the bounds of the states to be plotted
-            @param print_var:  the variable to be plotted
-            @param stencil_width:  the width of the stencil to use
-            @param order:  the order to use for each sweep
-            @param shuffle_clicks:  the number of times the shuffle button has been clicked
-            @param backSweep:  whether to sweep backwards
-            @param interpolative:  whether to interpolate
-            @param numSweeps:  the number of sweeps to do
-            @param redraw_clicks:  the number of times the redraw button has been clicked
-            @param prop_list: the properties to enforce continuity for
-            @param maxPan:  the maximum number of points to pan in stencil
-            @param energyWidth:  the width of the energy window
-            @param redundant:  whether to use redundant swaps
-            @param energy_bounds:  the bounds of the energies to be plotted
-            @param swap_clicks:  the number of times the swap button has been clicked
-            @param swap1:  the first state to swap
-            @param swap2:  the second state to swap
-            @param undo_clicks:  the number of times the undo button has been clicked
-            @param stop_clicks:  the number of times the stop button has been clicked
-            @param redo_clicks:  the number of times the redo button has been clicked
-            @return: the figure to be plotted
+            :param sweep_clicks:  the number of times the button has been clicked
+            :param point_bounds:  the bounds of the points to be plotted
+            :param state_bounds:  the bounds of the states to be plotted
+            :param print_var:  the variable to be plotted
+            :param stencil_width:  the width of the stencil to use
+            :param order:  the order to use for each sweep
+            :param shuffle_clicks:  the number of times the shuffle button has been clicked
+            :param backSweep:  whether to sweep backwards
+            :param interpolative:  whether to interpolate
+            :param numSweeps:  the number of sweeps to do
+            :param redraw_clicks:  the number of times the redraw button has been clicked
+            :param prop_list: the properties to enforce continuity for
+            :param maxPan:  the maximum number of points to pan in stencil
+            :param energyWidth:  the width of the energy window
+            :param redundant:  whether to use redundant swaps
+            :param energy_bounds:  the bounds of the energies to be plotted
+            :param swap_clicks:  the number of times the swap button has been clicked
+            :param swap1:  the first state to swap
+            :param swap2:  the second state to swap
+            :param undo_clicks:  the number of times the undo button has been clicked
+            :param stop_clicks:  the number of times the stop button has been clicked
+            :param redo_clicks:  the number of times the redo button has been clicked
+            :return the figure to be plotted
             """
             nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, last_swap_click
             nonlocal last_undo_click, last_stop_click, last_redo_click, last_remove_click, last_reset_click
@@ -1503,8 +1503,8 @@ class SuaveStateScanner:
         def save_order(save_clicks):
             """
             This function saves the order
-            @param save_clicks:  the number of times the button has been clicked
-            @return: the bounds of the points to be plotted
+            :param save_clicks:  the number of times the button has been clicked
+            :return the bounds of the points to be plotted
             """
             nonlocal last_save_clicks, callback_running
             if callback_running:

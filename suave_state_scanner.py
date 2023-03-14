@@ -1210,6 +1210,49 @@ class SuaveStateScanner:
                               options=[{'label': str(i + 1), 'value': i} for i in range(self.numProps)],
                               value=self.propList, labelStyle={'display': 'inline-block', 'padding': '10px'},
                               inputStyle={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '14px'}),
+                html.Div([  # make a div for all checklist options
+                    html.Div([  # create a div for checklist sweep backwards
+                        dcc.Checklist(id='backSweep', options=[{'label': 'Sweep Backwards', 'value': 'sweepBack'}],
+                                      value=False),
+                    ], style={'display': 'inline-block', 'width': '33%'}),
+
+                    html.Div([  # create a div for checklist interpolate missing values
+                        dcc.Checklist(id='interpolate',
+                                      options=[{'label': 'Interpolative Reorder', 'value': 'interpolate'}],
+                                      value=False),
+                    ], style={'display': 'inline-block', 'width': '33%'}),
+
+                    html.Div([  # create a div for checklist redundant swaps
+                        dcc.Checklist(id='redundant', options=[{'label': 'Redundant Swaps', 'value': 'redundant'}],
+                                      value=True),
+                    ], style={'display': 'inline-block', 'width': '33%'}),
+
+                ], style={'width': '30%', 'display': 'inline-block', 'padding': '0px 10px 0px 10px', 'margin': 'left'}),
+
+                html.Div([  # make a div for all manual inputs
+                    html.Div([  # create a div for number of sweep to do
+                        html.Label("Number of Sweeps:"),
+                        dcc.Input(id='numSweeps', type='number', value=1, min=1, max=100),
+                    ], style={'display': 'inline-block', 'width': '25%'}),
+
+                    html.Div([  # create a div for stencil width
+                        html.Label("Stencil Width:"),
+                        dcc.Input(placeholder="Stencil Width", id="stencil-width", type="number", value=self.width,
+                                  debounce=True),
+                    ], style={'display': 'inline-block', 'width': '25%'}),
+
+                    html.Div([  # create a div for maxPan
+                        html.Label("Max Pan of Stencil:"),
+                        dcc.Input(placeholder="Max Pan", id="max-pan", type="number", value=1000, debounce=True),
+                    ], style={'display': 'inline-block', 'width': '25%'}),
+
+                    html.Div([  # create a div for derivative order
+                        html.Label("Derivative Order:"),
+                        dcc.Input(placeholder="Derivative Order", id="order-value", type="number", value=self.orders[0],
+                                  debounce=True),
+                    ], style={'display': 'inline-block', 'width': '25%'}),
+                ], style={'width': '65%', 'display': 'inline-block', 'padding': '0px 10px 0px 10px',
+                          'margin': 'right'}),
             ], style={'display': 'inline-block', 'width': '100%', 'padding': '10px'}),
 
             html.Div([ # make a slider to control the points to be reordered
@@ -1239,48 +1282,6 @@ class SuaveStateScanner:
                             marks={1e-12: "Minimum Energy Width", abs(maxE - minE) + 1e-3: "Maximum Energy Width"},
                             step=1e-6, tooltip={'always_visible': True, 'placement': 'left'}),
             ], style={'width': '95%', 'display': 'inline-block', 'padding': '5px 0px 20px 50px', 'margin': 'auto'}),
-
-            html.Div([ # make a div for all checklist options
-                html.Div([  # create a div for checklist sweep backwards
-                    dcc.Checklist(id='backSweep', options=[{'label': 'Sweep Backwards', 'value': 'sweepBack'}],
-                                  value=False),
-                ], style={'display': 'inline-block', 'width': '33%'}),
-
-                html.Div([  # create a div for checklist interpolate missing values
-                    dcc.Checklist(id='interpolate', options=[{'label': 'Interpolative Reorder', 'value': 'interpolate'}],
-                                  value=False),
-                ], style={'display': 'inline-block', 'width': '33%'}),
-
-                html.Div([  # create a div for checklist redundant swaps
-                    dcc.Checklist(id='redundant', options=[{'label': 'Redundant Swaps', 'value': 'redundant'}],
-                                  value=True),
-                ], style={'display': 'inline-block', 'width': '33%'}),
-
-
-            ], style={'width': '30%', 'display': 'inline-block', 'padding': '0px 10px 0px 10px', 'margin': 'left'}),
-
-            html.Div([  # make a div for all manual inputs
-                html.Div([  # create a div for number of sweep to do
-                    html.Label("Number of Sweeps:"),
-                    dcc.Input(id='numSweeps', type='number', value=1, min=1, max=100),
-                ], style={'display': 'inline-block', 'width': '25%'}),
-
-                html.Div([  # create a div for stencil width
-                    html.Label("Stencil Width:"),
-                    dcc.Input(placeholder="Stencil Width", id="stencil-width", type="number", value=self.width, debounce=True),
-                ], style={'display': 'inline-block', 'width': '25%'}),
-
-                html.Div([  # create a div for maxPan
-                    html.Label("Max Pan of Stencil:"),
-                    dcc.Input(placeholder="Max Pan", id="max-pan", type="number", value=1000, debounce=True),
-                ], style={'display': 'inline-block', 'width': '25%'}),
-
-                html.Div([  # create a div for derivative order
-                    html.Label("Derivative Order:"),
-                    dcc.Input(placeholder="Derivative Order", id="order-value", type="number", value=self.orders[0],
-                              debounce=True),
-                ], style={'display': 'inline-block', 'width': '25%'}),
-            ], style={'width': '65%', 'display': 'inline-block', 'padding': '0px 10px 0px 10px', 'margin': 'right'}),
         ], style={'width': '100%', 'padding': '10px 10px 10px 10px', 'margin': 'auto',
                     # set dark theme
                     'backgroundColor': '#111111', 'color': '#7FDBFF'})

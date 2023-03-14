@@ -1,0 +1,22 @@
+{
+    "printVar": 0,
+    "interactive": true,
+    "maxiter": 1000,
+    "orders": [1],
+    "width": 3,
+    "futurePnts": 0,
+    "maxPan": 1,
+    "stateBounds": null,
+    "pntBounds": null,
+    "propList": null,
+    "sweepBack": false,
+    "eBounds": null,
+    "eWidth": null,
+    "interpolate": false,
+    "keepInterp": false,
+    "nthreads": 1,
+    "makePos": false,
+    "doShuffle": false,
+    "maxStateRepeat": -1,
+    "redundantSwaps": true
+}

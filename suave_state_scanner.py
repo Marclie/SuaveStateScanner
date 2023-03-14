@@ -15,6 +15,8 @@
 """
 
 import copy
+import json
+import argparse
 import sys
 import time
 
@@ -825,166 +827,31 @@ class SuaveStateScanner:
         """
         @brief This function will set parameters from the configuration file
         """
-        if self.configPath is None: # no config file
-            return # use default values
+        if self.configPath is None:
+            return
 
-        configer = open(self.configPath, 'r')
-        for line in configer.readlines():
-            line = line.replace("\n", "").replace(" ", "").strip()
-            if line == "": # skip empty lines
-                continue
-            if line[0] == "#": # skip comments
-                continue
-
-            splitLine = line.split("=") # split the line into the parameter and the value
-            if len(splitLine) != 2: # skip lines that don't have a parameter and a value
-                continue
-            if "#" in splitLine[1]: # remove comments from the value
-                splitLine[1] = splitLine[1].split("#")[0]
-
-            if "printVar" in splitLine[0]:
-                try:
-                    self.printVar = int(splitLine[1])
-                except ValueError:
-                    print("invalid index for variable to print. Defaulting to '0' for energy", flush=True)
-                    self.printVar = 0
-            if "interactive" in splitLine[0]:
-                if splitLine[1] == "True" or splitLine[1] == "true":
-                    self.interactive = True
-                else:
-                    self.interactive = False
-            if "maxiter" in splitLine[0]:
-                try:
-                    self.maxiter = int(splitLine[1])
-                except ValueError:
-                    print("invalid maxiter. Defaulting to '1000'", flush=True)
-                    self.maxiter = 1000
-            if "order" in splitLine[0]:
-                try:
-                    self.orders = stringToList(splitLine[1])
-                    self.orders = [int(order) for order in self.orders]
-                    if len(self.orders) == 0:
-                        print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'",
-                              flush=True)
-                        self.orders = [1]
-                except ValueError:
-                    print("The orders of the derivatives desired for computation are required. Defaulting to '[1]'",
-                          flush=True)
-                    self.orders = [1]
-            if "width" in splitLine[0]:
-                try:
-                    self.width = int(splitLine[1])
-                except ValueError:
-                    print("invalid type for width. Defaulting to '8'", flush=True)
-                    self.width = 8
-            if "futurePnts" in splitLine[0]:
-                try:
-                    self.futurePnts = int(splitLine[1])
-                except ValueError:
-                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("invalid type for futurePnts. Defaulting to '0'", flush=True)
-                    self.futurePnts = 0
-            if "maxPan" in splitLine[0]:
-                try:
-                    self.maxPan = int(splitLine[1])
-                except ValueError:
-                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("invalid type for maxPan. Defaulting to 'None'", flush=True)
-                    self.maxPan = None
-            if "pntBounds" in splitLine[0]:
-                try:
-                    self.pntBounds = stringToList(splitLine[1])
-                    self.pntBounds = [int(self.pntBounds[0]), int(self.pntBounds[1])]
-                    if len(self.pntBounds) == 0:
-                        print("The pntBounds provided is invalid. Defaulting to 'None'", flush=True)
-                        self.pntBounds = None
-                except ValueError:
-                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("The pntBounds provided is invalid. Defaulting to 'None'", flush=True)
-                    self.pntBounds = None
-            if "propList" in splitLine[0]:
-                try:
-                    self.propList = stringToList(splitLine[1])
-                    self.propList = [int(prop) for prop in self.propList]
-                except ValueError:
-                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("The propList provided is invalid. Defaulting to 'None'", flush=True)
-                    self.propList = None
-            if "sweepBack" in splitLine[0]:
-                if "False" in splitLine[1] or "false" in splitLine[1]:
-                    self.sweepBack = False
-                else:
-                    self.sweepBack = True
-            if "stateBounds" in splitLine[0]:
-                try:
-                    self.stateBounds = stringToList(splitLine[1])
-                    self.stateBounds = [int(self.stateBounds[0]), int(self.stateBounds[1])]
-                    if len(self.stateBounds) == 0:
-                        print("The stateBounds provided is invalid. Defaulting to 'None'", flush=True)
-                        self.stateBounds = None
-                except ValueError:
-                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("The stateBounds provided is invalid. Defaulting to 'None'", flush=True)
-                    self.stateBounds = None
-            if "eBounds" in splitLine[0]:
-                try:
-                    self.eBounds = stringToList(splitLine[1])
-                    self.eBounds = [float(self.eBounds[0]), float(self.eBounds[1])]
-                    if len(self.eBounds) == 0:
-                        print("The eBounds provided is invalid. Defaulting to 'None'", flush=True)
-                        self.eBounds = None
-                except ValueError:
-                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("The eBounds provided is invalid. Defaulting to 'None'", flush=True)
-                    self.eBounds = None
-            if "eWidth" in splitLine[0]:
-                try:
-                    self.eWidth = float(splitLine[1])
-                    if self.eWidth <= 0:
-                        print("The eWidth provided is invalid. Defaulting to 'None'", flush=True)
-                        self.eWidth = None
-                except ValueError:
-                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("invalid type for eWidth. Defaulting to 'None", flush=True)
-                    self.eWidth = None
-            if "interpolate" in splitLine[0]:
-                if "True" in splitLine[1] or "true" in splitLine[1]:
-                    self.interpolate = True
-                else:
-                    self.interpolate = False
-            if "keepInterp" in splitLine[0]:
-                if "True" in splitLine[1] or "true" in splitLine[1]:
-                    self.keepInterp = True
-                else:
-                    self.keepInterp = False
-            if "maxStateRepeat" in splitLine[0]:
-                try:
-                    self.maxStateRepeat = int(splitLine[1])
-                except ValueError:
-                    if "None" not in splitLine[1] and "none" not in splitLine[1]:
-                        print("invalid type for maxStateRepeat. Defaulting to 'None'", flush=True)
-                    self.maxStateRepeat = -1
-            if "nthreads" in splitLine[0]:
-                try:
-                    self.nthreads = int(splitLine[1])
-                except ValueError:
-                    print("Invalid nthread size. Defaulting to 1.", flush=True)
-                    self.nthreads = 1
-            if "makePos" in splitLine[0]:
-                if "True" in splitLine[1] or "true" in splitLine[1]:
-                    self.makePos = True
-                else:
-                    self.makePos = False
-            if "doShuffle" in splitLine[0]:
-                if "True" in splitLine[1] or "true" in splitLine[1]:
-                    self.doShuffle = True
-                else:
-                    self.doShuffle = False
-            if "redundantSwaps" in splitLine[0]:
-                if "True" in splitLine[1] or "true" in splitLine[1]:
-                    self.redundantSwaps = True
-                else:
-                    self.redundantSwaps = False
+        with open(self.configPath, 'r') as configer:
+            data = json.load(configer)
+            self.printVar = data.get("printVar", 0)
+            self.interactive = data.get("interactive", False)
+            self.maxiter = data.get("maxiter", 1000)
+            self.orders = data.get("orders", [1])
+            self.width = data.get("width", 8)
+            self.futurePnts = data.get("futurePnts", 0)
+            self.maxPan = data.get("maxPan", None)
+            self.pntBounds = data.get("pntBounds", None)
+            self.propList = data.get("propList", None)
+            self.sweepBack = data.get("sweepBack", True)
+            self.stateBounds = data.get("stateBounds", None)
+            self.eBounds = data.get("eBounds", None)
+            self.eWidth = data.get("eWidth", None)
+            self.interpolate = data.get("interpolate", False)
+            self.keepInterp = data.get("keepInterp", False)
+            self.maxStateRepeat = data.get("maxStateRepeat", -1)
+            self.nthreads = data.get("nthreads", 1)
+            self.makePos = data.get("makePos", False)
+            self.doShuffle = data.get("doShuffle", False)
+            self.redundantSwaps = data.get("redundantSwaps", False)
         if self.width <= 0 or self.width <= max(self.orders):
             print(
                 "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
@@ -1620,30 +1487,24 @@ class SuaveStateScanner:
         # run app without verbose output
         app.run_server(debug=False, use_reloader=False)
 
-
-
 if __name__ == "__main__":
-    try:
-        in_file = sys.argv[1]
-    except (ValueError, IndexError):
-        raise ValueError("First argument must be the input file")
+    parser = argparse.ArgumentParser(description="Suave State Scanner")
+    parser.add_argument("in_file", help="input file")
+    parser.add_argument("out_file", help="output file")
+    parser.add_argument("num_states", type=int, help="number of states in the input data")
+    parser.add_argument("-c", "--config", dest="config_path", help="configuration file")
 
-    try:
-        out_file = sys.argv[2]
-    except (ValueError, IndexError):
-        raise ValueError("Second argument must be the output file")
-    try:
-        num_states = int(sys.argv[3])
-    except (ValueError, IndexError):
-        raise ValueError("Third argument must specify the number of states in the input data")
+    args = parser.parse_args()
 
-    if len(sys.argv) > 4:
-        config_Path = sys.argv[4]
-    else:
-        config_Path = None
+    in_file = args.in_file
+    out_file = args.out_file
+    num_states = args.num_states
+    config_path = args.config_path
+
+    if config_path is None:
         print("No configuration file specified. Using default values.", flush=True)
 
-    suave = SuaveStateScanner(in_file, out_file, num_states, config_Path)
+    suave = SuaveStateScanner(in_file, out_file, num_states, config_path)
 
     if suave.interactive:
         suave.run_interactive()

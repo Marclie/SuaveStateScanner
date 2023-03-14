@@ -33,9 +33,14 @@ Usage
 
 To use this tool, run:
 
-    python suave_state_scanner.py <infile> <outfile> <numStates> [<configFile>]
+    python suave_state_scanner.py [-c CONFIG_PATH] in_file out_file num_states
 
-This will output the new energy ordering from \<infile\> to \<outfile\>, with the reaction coordinate as the first row. The files "tempInput.csv" and "tempOutput.csv" are generated during the reordering procedure. The "tempInput.csv" file stores all the state information for each point in a file that the user can use to restart this script. The "tempOutput.csv" file stores the output at any given iteration for the states, which is used to track the progress of the reordering.
+The required arguments are `in_file`, the input data file, `out_file`, the file to which the reordered states will be written, and `num_states`, the number of states in the input data. 
+
+The optional argument `-c CONFIG_PATH` is the path to the configuration file. If not provided, default values will be used.
+
+The script will generate the new energy ordering from `in_file` to `out_file`, with the reaction coordinate as the first row. During the reordering procedure, the files "tempInput.csv" and "tempOutput.csv" are generated. The "tempInput.csv" file stores all the state information for each point and can be used to restart the script. The "tempOutput.csv" file stores the output at any given iteration for the states, which can be used to track the progress of the reordering.
+
 
 Arguments
 ---------
@@ -80,34 +85,30 @@ not effectively reorder states if there are too many missing.
 
 Configuration File Format
 -------------------------
-The configuration file is a text file with the following format:
-
-```
-# This is a comment line. All lines starting with '#' will be ignored. 
-# Equal signs are required. Whitespace is ignored.
-# Arrays are specified with square brackets and commas.
-# The following are the default values for the configuration file:
-
-printVar = 0           # index for energy or property to print
-maxiter = 1000         # maximum number of iterations
-interactive = False    # interactive mode
-orders = [1]           # orders of derivatives to use
-width = 5              # stencil width
-futurePnts = 0         # number of future points to use
-maxPan = None          # maximum pivots of stencil width
-stateBounds = None     # bounds for states to use
-pntBounds = None       # bounds for points to use
-propList = None      # bounds for properties to use
-sweepBack = False       # whether to sweep backwards across points after reordering forwards
-eBounds = None         # bounds for energies to use
-eWidth = None          # width for valid energies to swap with current state at a point
-interpolate = False    # whether to interpolate over nan or inf values
-keepInterp = False     # whether to keep the interpolated energies and properties
-nthreads = 1           # number of threads to use
-makePos = False        # whether to make the properties positive
-doShuffle = False      # whether to shuffle the points before reordering
-maxStateRepeat = -1    # maximum number of times to repeat swapping an unmodified state
-redundantSwaps = False # whether to allow redundant swaps of lower-lying states
+The configuration file is in JSON format. The following is an example configuration file:
+``` json
+    {
+        "printVar": 0,
+        "interactive": true,
+        "maxiter": 1000,
+        "orders": [1],
+        "width": 3,
+        "futurePnts": 0,
+        "maxPan": 1,
+        "stateBounds": null,
+        "pntBounds": null,
+        "propList": null,
+        "sweepBack": false,
+        "eBounds": null,
+        "eWidth": null,
+        "interpolate": false,
+        "keepInterp": false,
+        "nthreads": 1,
+        "makePos": false,
+        "doShuffle": false,
+        "maxStateRepeat": -1,
+        "redundantSwaps": true
+    }
 ```
 
 All configurations in the configuration file are optional and are defined as follows:

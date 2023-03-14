@@ -31,7 +31,7 @@ from nstencil import makeStencil
 @njit(parallel=True, fastmath=False, nogil=True, cache=True)
 def approxDeriv(F, diff, center, stencil, alphas, sN):
     """
-    This function approximates the n-th order derivatives of a the energies and properties
+    This function approximates the n-th order derivatives of the energies and properties
            at a point for a given stencil size.
     :param F: the energies and properties of the state to be reordered and each state above it across each point
     :param diff: the finite differences of the energies and properties at the center point
@@ -39,7 +39,6 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
     :param stencil: the stencil to use in the finite difference approximation
     :param alphas: the coefficients of the stencil to use in the finite difference approximation
     :param sN: the size of the stencil to use in the finite difference approximation
-
     :return the n-th order finite differences of the energies and properties at the center point with the current stencil
     """
 
@@ -85,7 +84,6 @@ def combineVals(Evals, Pvals, allPnts, tempInput):
     :param Pvals: The properties for the current order
     :param allPnts: The points that are being evaluated
     :param tempInput: The input file for the current run
-
     :return The energy and properties for each state at each point
     """
 
@@ -147,6 +145,26 @@ def stringToList(string):
     :return
     """
     return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
+
+
+def interpolateDerivatives(diff):
+    """
+    Interpolate the derivatives using the given stencil
+    :param diff: derivatives
+    :return interpolated derivatives
+    """
+
+    # interpolate the derivatives
+    diff_shape = diff.shape
+    flat_diff = diff.flatten()
+
+    # get the indices of non-missing values
+    idx = np.where(np.isfinite(flat_diff))[0]
+
+    # interpolate the missing values over points
+    flat_diff = interpolate.interp1d(idx, flat_diff[idx], kind='previous', fill_value='extrapolate')(np.arange(flat_diff.size))
+
+    return flat_diff.reshape(diff_shape)
 
 
 class SuaveStateScanner:
@@ -384,7 +402,7 @@ class SuaveStateScanner:
 
         if self.hasMissing and not self.interpolate:
             # interpolate derivatives at missing points (not interpolating energies or properties)
-            diff = self.interpolateDerivatives(diff)
+            diff = interpolateDerivatives(diff)
         return mergediff(diff)
 
 
@@ -702,25 +720,6 @@ class SuaveStateScanner:
             self.E[i, :] = interpolate.interp1d(self.allPnts[idx], self.E[i, idx], kind=interpKind, fill_value='extrapolate')(self.allPnts)
         print("Done\n", flush=True)
 
-    def interpolateDerivatives(self, diff):
-        """
-        Interpolate the derivatives using the given stencil
-        :param diff: derivatives
-        :return interpolated derivatives
-        """
-
-        # interpolate the derivatives
-        diff_shape = diff.shape
-        flat_diff = diff.flatten()
-
-        # get the indices of non-missing values
-        idx = np.where(np.isfinite(flat_diff))[0]
-
-        # interpolate the missing values over points
-        flat_diff = interpolate.interp1d(idx, flat_diff[idx], kind='previous', fill_value='extrapolate')(np.arange(flat_diff.size))
-
-        return flat_diff.reshape(diff_shape)
-    
     def moveMissing(self):
         """Move missing values at each point to the last states"""
         print("\nMoving missing values to the end of the array...", end=" ", flush=True)
@@ -783,7 +782,6 @@ class SuaveStateScanner:
         """
         This function will save the state information of a reorder scan for a future run of this script
         :param isFinalResults: A boolean that determines if the final results are being saved
-
         :return The energy and properties for each state at each point written to a file "checkpoint.csv"
         """
 
@@ -1325,6 +1323,9 @@ class SuaveStateScanner:
             :param undo_clicks:  the number of times the undo button has been clicked
             :param stop_clicks:  the number of times the stop button has been clicked
             :param redo_clicks:  the number of times the redo button has been clicked
+            :param remove_clicks: the number of times the remove button has been clicked
+            :param remove_state: the state to remove
+            :param reset_clicks: the number of times the reset button has been clicked
             :return the figure to be plotted
             """
             nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, last_swap_click

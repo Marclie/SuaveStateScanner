@@ -31,16 +31,34 @@ separating and labeling sets of eigenvectors that have similar eigenvalues along
 Usage
 -----
 
-To use this tool, run:
+Clone the repository and install the dependencies with:
+``` bash
+    pip install -r requirements.txt
+```
 
+To use this tool, run:
+``` bash
     python suave_state_scanner.py [-c CONFIG_PATH] in_file out_file num_states
+```
 
 The required arguments are `in_file`, the input data file, `out_file`, the file to which the reordered states will be written, and `num_states`, the number of states in the input data. 
 
 The optional argument `-c CONFIG_PATH` is the path to the configuration file. If not provided, default values will be used.
 
 The script will generate the new energy ordering from `in_file` to `out_file`, with the reaction coordinate as the first row. 
-During the reordering procedure, the files `checkpoint.csv` and `temp_out.csv` are generated. The "tempInput.csv" file stores all the state information for each point and can be used to restart the script. The "tempOutput.csv" file stores the output at any given iteration for the states, which can be used to track the progress of the reordering.
+During the reordering procedure, the files `checkpoint.csv` and `temp_out.csv` are generated. 
+The `checkpoint.csv` file stores all the state information for each point and can be used to restart the script. 
+The `temp_out.csv` file stores the output at any given iteration for the states, which can be used to track the progress of the reordering.
+
+SuaveStateScanner can also be called directly from python with the following:
+``` python
+    from suave_state_scanner.py import SuaveStateScanner
+    scanner = SuaveStateScanner(in_file, out_file, num_states, configPath=config_path)
+    if scanner.interactive:
+        scanner.run_interactive()
+    else:
+        scanner.run()
+```
 
 
 Arguments

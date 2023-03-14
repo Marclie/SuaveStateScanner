@@ -1134,9 +1134,9 @@ class SuaveStateScanner:
                       config={'displayModeBar': False}
                       ),
             ]),
-            html.Div([ # create a div for the buttons
+            html.Div([  # create a div for the buttons
 
-                html.H2("Controls"),
+                html.H2("Controls", style={'text-align': 'center'}),
 
                 html.Div([  # Print Selection
                     html.Label("Print Selection"),
@@ -1144,50 +1144,73 @@ class SuaveStateScanner:
                                  options=[{'label': "Energy" if i == 0 else "Property " + str(i), 'value': i}
                                           for i
                                           in range(self.numProps + 1)], clearable=False),
-                    html.Div([  # Redraw
-                        html.Button('Redraw', id='redraw', n_clicks=0, style={'padding': '2px'}),
-                        html.Button('Sweep and Reorder', id='button', n_clicks=0, style={'padding': '2px'}),
-                        html.Button('Abort', id='stop-button', n_clicks=0, style={'padding': '2px'}),
+                    html.Div([  # Redraw, Sweep and Reorder, Abort
+                        html.Button('Redraw', id='redraw', n_clicks=0,
+                                    style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                           'font-size': '14px', 'width': '100%'}),
+                        html.Button('Sweep and Reorder', id='button', n_clicks=0,
+                                    style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                           'font-size': '14px', 'width': '100%'}),
+                        html.Button('Abort', id='stop-button', n_clicks=0,
+                                    style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                           'font-size': '14px', 'width': '100%'}),
                     ], style={'display': 'inline-block'}),
                 ], style={'display': 'inline-block', 'padding': '10px'}),
                 html.Div([  # Save
-                    html.Button('Save Output', id='save-button', n_clicks=0),
+                    html.Button('Save Output', id='save-button', n_clicks=0,
+                                style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                       'font-size': '14px', 'width': '20%'}),
                 ], style={'display': 'inline-block', 'width': '100%'}),
                 html.Div([  # Undo Redo
-                    html.Button('Undo', id='undo', n_clicks=0, style={'padding': '2px'}),
-                    html.Button('Redo', id='redo', n_clicks=0, style={'padding': '2px'}),
+                    html.Button('Undo', id='undo', n_clicks=0,
+                                style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                       'font-size': '14px', 'width': '10%'}),
+                    html.Button('Redo', id='redo', n_clicks=0,
+                                style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                       'font-size': '14px', 'width': '10%'}),
                 ], style={'display': 'inline-block', 'width': '100%'}),
             ], style={'width': '100%', 'display': 'inline-block', 'padding': '10px'}),
 
             html.Div([  # create a div for swapping two states by index with button
                 html.Div([
-                    html.Button('Swap States', id='swap-button', n_clicks=0),  # make a button to start the animation
+                    html.Button('Swap States', id='swap-button', n_clicks=0,
+                                style={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '14px',
+                                       'padding': '10px', 'width': '100%'}),  # make a button to start the animation
                 ], style={'display': 'inline-block', 'padding': '2px 10px 2px 2px', 'margin': 'auto'}),
                 html.Div([
                     html.Label('State 1:'),  # make an input for state 1
-                    dcc.Input(id='swap-input1', type='number', value=0, min=0, max=self.numStates - 1, step=1),
+                    dcc.Input(id='swap-input1', type='number', value=0, min=0, max=self.numStates - 1, step=1,
+                              style={'background-color': '#FFFFFF', 'color': '#222222', 'font-size': '14px',
+                                     'padding': '10px', 'width': '100%'}),
                 ], style={'display': 'inline-block', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
                 html.Div([
-                    html.Label('State 2:'),  # make an input for state 2
-                    dcc.Input(id='swap-input2', type='number', value=1, min=0, max=self.numStates - 1, step=1)
-                ], style={'display': 'inline-block', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
-                html.Div([  # create a div for shuffle
-                    html.Button('Shuffle Values', id='shuffle-button', n_clicks=0),
-                    # make a button to start the animation
+                    html.Div([
+                        html.Label('State 2:'),  # make an input for state 2
+                        dcc.Input(id='swap-input2', type='number', value=1, min=0, max=self.numStates - 1, step=1,
+                                  style={'background-color': '#FFFFFF', 'color': '#222222', 'font-size': '14px',
+                                         'padding': '10px', 'width': '100%'}),
+                    ], style={'display': 'inline-block', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
+                    html.Div([  # create a div for shuffle
+                        html.Button('Shuffle Values', id='shuffle-button', n_clicks=0,
+                                    style={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '14px',
+                                           'padding': '10px', 'width': '100%'}),
+                        # make a button to start the animation
+                    ], style={'display': 'inline-block', 'padding': '2px 2px 2px 50px', 'margin': 'auto'}),
                 ], style={'display': 'inline-block', 'padding': '2px 2px 2px 50px', 'margin': 'auto'}),
             ], style={'display': 'inline-block', 'width': '100%'}),
 
             dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
             dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
 
-            html.H2("Settings"),
+            html.H2("Settings", style={'text-align': 'center'}),
 
             html.Div([  # Property List
                 html.Label("Property List"),
                 dcc.Checklist(id="prop-list",
                               options=[{'label': str(i + 1), 'value': i} for i in range(self.numProps)],
-                              value=self.propList, labelStyle={'display': 'inline-block', 'padding': '10px'})
-            ], style={'display': 'inline-block', 'padding': '10px'}),
+                              value=self.propList, labelStyle={'display': 'inline-block', 'padding': '10px'},
+                              inputStyle={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '14px'}),
+            ], style={'display': 'inline-block', 'width': '100%', 'padding': '10px'}),
 
             html.Div([ # make a slider to control the points to be reordered
                 html.Div("Point Range", style={'display': 'inline-block', 'width': '30%', 'padding': '10px 10px 10px 10px'}),

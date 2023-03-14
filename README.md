@@ -193,7 +193,7 @@ All configurations in the configuration file are optional and are defined as fol
    in the output file. The interpolation is a cubic spline when saved to disk. (default: False)
 
 
-* `maxStateRepeat` - The maximum number of times a state can be repeated without changes in reordering procedure. If this parameter is not provided, the default value 'None' will be used, meaning there is no limit to the number of times a state can be repeated. (default: None)
+* `maxStateRepeat` - The maximum number of times a state can be repeated without changes in reordering procedure. If this parameter is not provided, the default value '-1' will be used, meaning there is no limit to the number of times a state can be repeated. (default: -1)
 
 
 * `nthreads` - The number of numba threads to use (default: 1)

@@ -53,7 +53,8 @@ The `temp_out.csv` file stores the output at any given iteration for the states,
 SuaveStateScanner can also be called directly from python with the following:
 ``` python
     from suave_state_scanner.py import SuaveStateScanner
-    scanner = SuaveStateScanner(in_file, out_file, num_states, configPath=config_path)
+    scanner = SuaveStateScanner(infile="input.csv", outfile="output.csv", 
+                                numStates, configPath="suave.json")
     if scanner.interactive:
         scanner.run_interactive()
     else:

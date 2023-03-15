@@ -585,8 +585,11 @@ class SuaveStateScanner:
                 # nth order finite difference
                 # compare continuity differences from this state swapped with all other states
                 dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
+
+                pTest = self.P[:,:,self.propList][validStates]
+                pTest /= pTest.sum() # normalize properties
                 if not self.ignoreProps:
-                    dP = self.generateDerivatives(pnt, self.P[:,:,self.propList][validStates], backwards=backwards)
+                    dP = self.generateDerivatives(pnt, pTest, backwards=backwards)
                 else:
                     dP = np.ones_like(self.P[validStates, :, 0])
 
@@ -612,9 +615,10 @@ class SuaveStateScanner:
 
                     # nth order finite difference from swapped states
                     dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
+                    pTest = self.P[:, :, self.propList][validStates]
+                    pTest /= pTest.sum() # normalize properties
                     if not self.ignoreProps:
-                        dP = self.generateDerivatives(pnt, self.P[:,:,self.propList][validStates],
-                                                      backwards=backwards)
+                        dP = self.generateDerivatives(pnt, pTest, backwards=backwards)
                     else:
                         dP = np.ones_like(self.P[validStates, :, 0])
 

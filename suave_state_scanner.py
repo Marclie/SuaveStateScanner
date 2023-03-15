@@ -97,7 +97,6 @@ def combineVals(Evals, Pvals, allPnts, tempInput):
             for feat in prange(numFeat):
                 tempInput[pnt * numStates + state, feat + 2] = Pvals[state, pnt, feat]
 
-@njit(parallel=True, fastmath=False, nogil=True, cache=True)
 def mergediff(diff):
     """
     This function will merge the finite differences for the energy and properties

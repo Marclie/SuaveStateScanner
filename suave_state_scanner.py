@@ -698,6 +698,7 @@ class SuaveStateScanner:
             validArray = buildValidArray(validArray, self.E, lobound, pnt, state, upbound,
                                          eLow, eHigh, eWidth, hasEBounds, hasEWidth)
         else:
+            validArray.fill(True)  # set all states to be valid
             pass # if no bounds or width are specified, all states are valid
 
 

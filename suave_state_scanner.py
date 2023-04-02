@@ -400,7 +400,7 @@ class SuaveStateScanner:
         """
         This function sorts the energies and properties of the state such that the first point is in ascending energy order.
         """
-        sort_pos = 0 if not self.sortLast else -1
+        sort_pos = self.pntBounds[0] if not self.sortLast else self.pntBounds[1]-1
         idx = self.E[:, sort_pos].argsort()
         self.E[:] = self.E[idx]
         self.P[:] = self.P[idx]
@@ -541,19 +541,16 @@ class SuaveStateScanner:
 
         # ensure that bounds include enough points to make a valid finite difference
         maxorder = max(self.orders)
-        if not backwards:
-            start += maxorder
-        else:
-            start -= maxorder
-
         validPnts = [i for i in range(start, end, delta) if 0 <= i < self.numPoints]
 
         modifiedStates = []
         futurePnts_copy = self.futurePnts
         for pnt in range(start, end, delta):
 
-            if pnt == start:
-                self.futurePnts = 1 if self.futurePnts <= 0 else self.futurePnts
+            set_off = abs(pnt - start) <= maxorder
+            if set_off:
+                new_off = maxorder - abs(pnt - start)
+                self.futurePnts = new_off if self.futurePnts <= new_off else self.futurePnts
 
             sys.stdout.flush()
             direction = "FORWARDS"

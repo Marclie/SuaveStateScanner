@@ -13,4 +13,7 @@ def getMetric(dE, dP):
     # reduce dP to a single vector
     dP = dP @ np.ones(dP.shape[1])
 
+    # normalize the properties (less important than the energies)
+    dP /= np.linalg.norm(dP)
+
     return (dE * dP).sum()

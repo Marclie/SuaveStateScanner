@@ -117,7 +117,7 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eLow, eHigh, 
     # set all states at points that are not valid to False
     for state in prange(0, Evals.shape[0]):
         # set all states less than lower bound and greater than upper bound to False
-        if state < lobound or state >= upbound:
+        if not (lobound <= state < upbound):
             validArray[state] = False
         if hasEBounds:
             if not (eLow <= Evals[state, pnt] <= eHigh):
@@ -519,6 +519,14 @@ class SuaveStateScanner:
         if self.halt:
             print("Halting point sweeps")
             return
+
+        # create bounds for states to be reordered
+        lobound = self.stateBounds[0]  # lower bound for state
+        upbound = self.stateBounds[1]  # upper bound for state
+
+        if not (lobound <= state < upbound):
+            return []  # skip state if out of bounds
+
         # reorder states across points for current state moving forwards or backwards in 'time'
         start = self.pntBounds[0]
         end = self.pntBounds[1]
@@ -535,10 +543,6 @@ class SuaveStateScanner:
             start += maxorder
         else:
             start -= maxorder
-
-        # create bounds for states to be reordered
-        lobound = self.stateBounds[0]  # lower bound for state
-        upbound = self.stateBounds[1]  # upper bound for state
 
         modifiedStates = []
         for pnt in range(start, end, delta):
@@ -558,7 +562,7 @@ class SuaveStateScanner:
 
             swapStart = state + 1 # start swapping states at the next state
             if self.redundantSwaps: # if redundant swaps are allowed, start swapping states at the first state
-                swapStart = 0
+                swapStart = lobound
 
             validStates = self.findValidStates(lobound, pnt, state, upbound)
 
@@ -575,8 +579,8 @@ class SuaveStateScanner:
                 # compare continuity differences from this state swapped with all other states
                 dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
 
-                pTest = self.P[:,:,self.propList][validStates]
-                pTest /= pTest.sum() # normalize properties
+                pTest = self.P[validStates][:,:,self.propList]
+
                 if not self.ignoreProps:
                     dP = self.generateDerivatives(pnt, pTest, backwards=backwards)
                 else:
@@ -589,7 +593,7 @@ class SuaveStateScanner:
                 minDif = (diff, state)
 
                 # loop through all states to find the best swap
-                for i in range(swapStart, self.numStates): # point is allowed to swap with states outside of bounds
+                for i in range(swapStart, upbound): # point is allowed to swap with states outside of bounds
 
                     if i not in validStates: # skip states that are not valid
                         continue
@@ -604,8 +608,8 @@ class SuaveStateScanner:
 
                     # nth order finite difference from swapped states
                     dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
-                    pTest = self.P[:, :, self.propList][validStates]
-                    pTest /= pTest.sum() # normalize properties
+                    pTest = self.P[validStates][:, :, self.propList]
+
                     if not self.ignoreProps:
                         dP = self.generateDerivatives(pnt, pTest, backwards=backwards)
                     else:

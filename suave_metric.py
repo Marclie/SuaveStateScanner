@@ -10,4 +10,7 @@ def getMetric(dE, dP):
     :return the ordering metric for the given finite differences
     """
 
+    # reduce dP to a single vector
+    dP = dP @ np.ones(dP.shape[1])
+
     return (dE * dP).sum()

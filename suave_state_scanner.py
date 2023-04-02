@@ -545,7 +545,12 @@ class SuaveStateScanner:
             start -= maxorder
 
         modifiedStates = []
+        futurePnts_copy = self.futurePnts
         for pnt in range(start, end, delta):
+
+            if pnt == start:
+                self.futurePnts = 1 if self.futurePnts <= 0 else self.futurePnts
+
             sys.stdout.flush()
             direction = "FORWARDS"
             if backwards:
@@ -655,6 +660,7 @@ class SuaveStateScanner:
             else:
                 print(lastDif, flush=True)
             sys.stdout.flush()
+            self.futurePnts = futurePnts_copy
         return modifiedStates
 
     def findValidStates(self, lobound, pnt, ref, upbound):
@@ -851,6 +857,8 @@ class SuaveStateScanner:
             print(
                 "invalid size for width. width must be positive integer greater than max order. Defaulting to 'max(orders)+3'")
             self.width = max(self.orders) + 3
+        if self.futurePnts < 0:
+            raise ValueError("Invalid number of future points")
         configer.close()
 
 

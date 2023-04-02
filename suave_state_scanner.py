@@ -27,6 +27,7 @@ from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
 import scipy.interpolate as interpolate
 
 from nstencil import makeStencil
+from suave_metric import getMetric
 
 @njit(parallel=True, fastmath=False, nogil=True, cache=True)
 def approxDeriv(F, diff, center, stencil, alphas, sN):
@@ -46,17 +47,6 @@ def approxDeriv(F, diff, center, stencil, alphas, sN):
     for s in prange(sN):
         pnt = center + stencil[s]
         diff[:, s] = alphas[s] * F[:, pnt]
-
-@njit(parallel=True, fastmath=False, nogil=True, cache=True)
-def getMetric(dE, dP):
-    """
-    This function computes the ordering metric for a given set of finite differences.
-    :param dE: the finite differences of the energies at the center point (shape: (numStates))
-    :param dP: the finite differences of the properties at the center point (shape: (numStates, numFeatures))
-    :return the ordering metric for the given finite differences
-    """
-
-    return (dE @ dP).sum()
 
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def stateDifference(Evals, Pvals, stateEvals, statePvals, state):

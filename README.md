@@ -1,8 +1,7 @@
 ![Alt text](suave.svg)
 
 [SuaveStateScanner](#introduction) - A tool for excited electronic state labeling and continuity
-=======================================================================
-[SuaveStateScanner]:(#introduction)
+================================================================================================
 
 Table of Contents
 -----------------
@@ -262,6 +261,20 @@ If your data is not converging and/or the order of states is not accurate, there
 - For problematic points that cause the script to fail, you can try to manually reorder the states at that point. This can be done by editing the input file and changing the order of the states at that point. The script will then use this new order as the starting point for its reordering procedure.
 
 - Additionally, you can set the energy and properties of the problematic points to 'nan' in the input file. The script will then ignore these points, either explicitly or via interpolation `interpolate`, and will not try to reorder the states at these points. Unless the `keepInterp` or `interpolate` parameter is set to True, the script will not print the nan/inf points in the output file (those points will have 'nan' for the energy and properties).
+
+- A large problem comes from the definition of the metric for when states should be swapped or not. This is determined by the `getMetric` function in suave_metric.py. Depending on your data, you may need to change this function to get the correct behavior. The current metric is defined as:
+
+``` python
+def getMetric(dE, dP):
+    """
+    This function computes the ordering metric for a given set of finite differences.
+    :param dE: the finite differences of the energies at the current point (shape: (numStates))
+    :param dP: the finite differences of the properties at the current point (shape: (numStates, numFeatures))
+    :return the ordering metric for the given finite differences
+    """
+
+    return (dE * dP).sum()
+```
 
 - If you are still having trouble, please contact me at my [email](mailto:mliebenthal@fsu.edu) or submit a ticket and I will try to help you out.
 

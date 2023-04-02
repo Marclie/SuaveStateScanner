@@ -185,8 +185,7 @@ All configurations in the configuration file are optional and are defined as fol
 * `stateBounds` - The bounds of the states in the input file. If provided, this should be a
   list in the form [statemin, statemax] specifying inclusive lower and
   upper bounds on indices identifying individual electronic states to sort (e.g., if numStates=3 then
-  stateBounds=[0, 1] would reorder only two out of three available electronic states). 
-  Electronic states from outside the range can swap with interior states to further improve continuity. By default all available
+  stateBounds=[0, 1] would reorder only two out of three available electronic states). By default all available
   electronic states will be included in analysis/output unless stateBounds is specified otherwise. (default: None)
 
 
@@ -262,7 +261,8 @@ If your data is not converging and/or the order of states is not accurate, there
 
 - Additionally, you can set the energy and properties of the problematic points to 'nan' in the input file. The script will then ignore these points, either explicitly or via interpolation `interpolate`, and will not try to reorder the states at these points. Unless the `keepInterp` or `interpolate` parameter is set to True, the script will not print the nan/inf points in the output file (those points will have 'nan' for the energy and properties).
 
-- A large problem comes from the definition of the metric for when states should be swapped or not. This is determined by the `getMetric` function in `suave_metric.py`. Depending on your data, you may need to change this function to get the correct behavior. The current metric is defined as:
+- A large problem comes from the definition of the metric for when states should be swapped or not. This is determined by the `getMetric` function in `suave_metric.py`. 
+  Depending on your data, you may need to change this function to get the correct behavior. The current metric is defined as:
 
 ``` python
 def getMetric(dE, dP):
@@ -272,6 +272,9 @@ def getMetric(dE, dP):
     :param dP: the finite differences of the properties at the current point (shape: (numStates, numFeatures))
     :return the ordering metric for the given finite differences
     """
+
+    # reduce dP to a single vector
+    dP = dP @ np.ones(dP.shape[1])
 
     return (dE * dP).sum()
 ```

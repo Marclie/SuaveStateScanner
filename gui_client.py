@@ -69,7 +69,13 @@ def startClient(suave):
                     html.Button('Redraw', id='redraw', n_clicks=0,
                                 style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
                                        'font-size': '14px', 'width': '100%'}),
-                    html.Button('Sweep and Reorder', id='button', n_clicks=0,
+                    html.Button('Sweep Backwards', id='button-backwards', n_clicks=0,
+                                style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                       'font-size': '14px', 'width': '50%'}),
+                    html.Button('Sweep Forwards', id='button-forwards', n_clicks=0,
+                                style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
+                                       'font-size': '14px', 'width': '50%'}),
+                    html.Button('Alternate Sweep', id='button-alternate', n_clicks=0,
                                 style={'padding': '10px', 'background-color': '#1E90FF', 'color': '#222222',
                                        'font-size': '14px', 'width': '100%'}),
                     html.Button('Abort', id='stop-button', n_clicks=0,
@@ -149,10 +155,6 @@ def startClient(suave):
                           value=suave.propList, labelStyle={'display': 'inline-block', 'padding': '10px'},
                           inputStyle={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '14px'}),
             html.Div([  # make a div for all checklist options
-                html.Div([  # create a div for checklist sweep backwards
-                    dcc.Checklist(id='backSweep', options=[{'label': 'Sweep Backwards', 'value': 'sweepBack'}],
-                                  value=False),
-                ], style={'display': 'inline-block', 'width': '33%'}),
 
                 html.Div([  # create a div for checklist interpolate missing values
                     dcc.Checklist(id='interpolate',
@@ -333,7 +335,9 @@ def startClient(suave):
         eval_redo = []
         pval_redo = []
 
-    last_sweep_click = 0  # initialize last sweep click
+    last_forward_sweep_click = 0  # initialize last forward sweep click
+    last_backward_sweep_click = 0  # initialize last backward sweep click
+    last_alternate_sweep_click = 0  # initialize last alternate sweep click
     last_shuffle_click = 0  # initialize last shuffle click
     last_redraw_click = 0  # initialize last redraw click
     last_swap_click = 0  # initialize last swap click
@@ -346,9 +350,9 @@ def startClient(suave):
 
     @app.callback(
         [Output('graph', 'figure'), Output('loading-reorder-out', 'children')],
-        [Input('button', 'n_clicks'), Input('point-slider', 'value'), Input('state-slider', 'value'),
-         Input('print-var', 'value'), Input('stencil-width', 'value'),
-         Input('order-value', 'value'), Input('shuffle-button', 'n_clicks'), Input('backSweep', 'value'),
+        [Input('button-forwards', 'n_clicks'), Input('button-backwards', 'n_clicks'), Input('button-alternate', 'n_clicks'),
+         Input('point-slider', 'value'), Input('state-slider', 'value'), Input('print-var', 'value'), Input('stencil-width', 'value'),
+         Input('order-value', 'value'), Input('shuffle-button', 'n_clicks'),
          Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('redraw', 'n_clicks'),
          Input('prop-list', 'value'),
          Input('max-pan', 'value'), Input('energy-width', 'value'), Input('redundant', 'value'),
@@ -358,23 +362,23 @@ def startClient(suave):
          Input('stop-button', 'n_clicks'), Input('redo', 'n_clicks'), Input('remove-button', 'n_clicks'),
          Input('remove-state-input', 'value'),
          Input('reset-button', 'n_clicks')])
-    def update_graph(sweep_clicks, point_bounds, state_bounds, print_var, stencil_width, order, shuffle_clicks,
-                     backSweep,
-                     interpolative, numSweeps, redraw_clicks, prop_list, maxPan, energyWidth, redundant,
-                     energy_bounds,
-                     swap_clicks, swap1, swap2, undo_clicks, stop_clicks, redo_clicks, remove_clicks, remove_state,
+    def update_graph(forward_sweep_clicks,backward_sweep_clicks,alternate_sweep_clicks, point_bounds, state_bounds,
+                     print_var, stencil_width, order, shuffle_clicks, interpolative, numSweeps, redraw_clicks,
+                     prop_list, maxPan, energyWidth, redundant, energy_bounds, swap_clicks, swap1, swap2, undo_clicks,
+                     stop_clicks, redo_clicks, remove_clicks, remove_state,
                      reset_clicks):
         """
         This function updates the graph
 
-        :param sweep_clicks:  the number of times the button has been clicked
+        :param forward_sweep_clicks:  the number of times the forward sweep button has been clicked
+        :param backward_sweep_clicks:  the number of times the backwards sweep button has been clicked
+        :param alternate_sweep_clicks:  the number of times the alternate sweep button has been clicked
         :param point_bounds:  the bounds of the points to be plotted
         :param state_bounds:  the bounds of the states to be plotted
         :param print_var:  the variable to be plotted
         :param stencil_width:  the width of the stencil to use
         :param order:  the order to use for each sweep
         :param shuffle_clicks:  the number of times the shuffle button has been clicked
-        :param backSweep:  whether to sweep backwards
         :param interpolative:  whether to interpolate
         :param numSweeps:  the number of sweeps to do
         :param redraw_clicks:  the number of times the redraw button has been clicked
@@ -394,7 +398,7 @@ def startClient(suave):
         :param reset_clicks: the number of times the reset button has been clicked
         :return the figure to be plotted
         """
-        nonlocal last_sweep_click, last_shuffle_click, last_redraw_click, last_swap_click
+        nonlocal last_forward_sweep_click, last_backward_sweep_click, last_alternate_sweep_click, last_shuffle_click, last_redraw_click, last_swap_click
         nonlocal last_undo_click, last_stop_click, last_redo_click, last_remove_click, last_reset_click
         nonlocal eval_undo, pval_undo, eval_redo, pval_redo, original_eval, original_pval
         nonlocal sweep, callback_running
@@ -402,13 +406,15 @@ def startClient(suave):
         if stop_clicks > last_stop_click:  # if stop button has been clicked
             last_stop_click = stop_clicks  # update last stop click
             suave.halt = True  # halt the scanner
-            return no_update, no_update  # return no update
+            return make_figure()[0], "Aborted"
         else:
             suave.halt = False  # otherwise, don't halt the scanner
 
         if callback_running:  # if callback is running
             # update all click counters
-            last_sweep_click = sweep_clicks
+            last_forward_sweep_click = forward_sweep_clicks
+            last_backward_sweep_click = backward_sweep_clicks
+            last_alternate_sweep_click = alternate_sweep_clicks
             last_shuffle_click = shuffle_clicks
             last_redraw_click = redraw_clicks
             last_swap_click = swap_clicks
@@ -470,10 +476,24 @@ def startClient(suave):
             suave.energyBounds[1] = max_bound + 1e-6  # set maximum energy bound
             print("Energy bounds too small. Using minimum energy bounds instead.", flush=True)
 
+        back_sweep = False  # set back sweep to false
+        alternate_sweep = False  # set alternate sweep to false
+
         # check which button was clicked and update the graph accordingly
-        if sweep_clicks > last_sweep_click and sweep_clicks > 0:  # if sweep button was clicked
+        num_sweep_clicks = forward_sweep_clicks + backward_sweep_clicks + alternate_sweep_clicks
+        last_num_sweep_clicks = last_forward_sweep_click + last_backward_sweep_click + last_alternate_sweep_click
+        if num_sweep_clicks > last_num_sweep_clicks and num_sweep_clicks > 0:  # if sweep button was clicked
             # perform a sweep
-            last_sweep_click = sweep_clicks  # update last sweep click
+            if forward_sweep_clicks > last_forward_sweep_click:
+                back_sweep = False
+            elif backward_sweep_clicks > last_backward_sweep_click:
+                back_sweep = True
+            elif alternate_sweep_clicks > last_alternate_sweep_click:
+                alternate_sweep = True
+            last_forward_sweep_click = forward_sweep_clicks
+            last_backward_sweep_click = backward_sweep_clicks
+            last_alternate_sweep_click = alternate_sweep_clicks
+
         elif redraw_clicks > last_redraw_click:  # redraw button clicked
             last_redraw_click = redraw_clicks
             ret = make_figure()[0], "Redrawn"
@@ -544,13 +564,14 @@ def startClient(suave):
         # perform a sweep
         lastEvals, lastPvals = suave.prepareSweep()
 
-        # skip first sweep
-        for i in range(numSweeps):
+        for i in range(numSweeps + numSweeps*int(alternate_sweep)): # perform sweeps and alternate sweeps if necessary
             lastEvals, lastPvals = suave.prepareSweep()
             sweep += 1
             for state in range(suave.numStates):
-                suave.sweepState(state, sweep, backward=backSweep)
+                suave.sweepState(state, sweep, backward=back_sweep)
             suave.analyzeSweep(lastEvals, lastPvals)
+            if alternate_sweep:
+                back_sweep = True
         time.sleep(0.1)
 
         delMax = suave.analyzeSweep(lastEvals, lastPvals)
@@ -561,7 +582,9 @@ def startClient(suave):
             suave.sortEnergies()
 
         # update plot data
-        last_sweep_click = sweep_clicks  # update last sweep click (should already be updated, but just in case)
+        last_forward_sweep_click = forward_sweep_clicks
+        last_backward_sweep_click = backward_sweep_clicks
+        last_alternate_sweep_click = alternate_sweep_clicks
         ret = make_figure()
         callback_running = False
         return ret

@@ -158,7 +158,7 @@ def startClient(suave):
 
                 html.Div([  # create a div for checklist interpolate missing values
                     dcc.Checklist(id='sort-last',
-                                  options=[{'label': 'Sort by last point', 'value': 'sort-last'}],
+                                  options=[{'label': 'Sort by Last Point', 'value': 'sort-last'}],
                                   value=False),
                 ], style={'display': 'inline-block', 'width': '33%'}),
 
@@ -247,6 +247,7 @@ def startClient(suave):
 
         # update plot data
         lastEvals, lastPvals = suave.prepareSweep()  # save last energies and properties
+        suave.sortEnergies()  # sort energies
         if suave.printVar == 0:
             data = suave.E
         elif suave.printVar < 0:
@@ -254,19 +255,20 @@ def startClient(suave):
         else:
             data = suave.P[:, :, suave.printVar - 1]
 
+
         # create figure
-        fig = go.Figure(
-            data=[go.Scatter(x=suave.allPnts, y=data[state, :], mode='lines+markers', name="State {}".format(state))
+        fig = {
+            'data': [go.Scatter(x=suave.allPnts, y=data[state, :], mode='lines+markers', name="State {}".format(state))
                   for state in range(suave.numStates)],
 
-            layout=go.Layout(title="SuaveStateScanner", xaxis={'title': 'Reaction Coordinate'},
+            'layout': go.Layout(title="SuaveStateScanner", xaxis={'title': 'Reaction Coordinate'},
                              hovermode='closest',
                              uirevision='constant',
                              # set dark theme
                              paper_bgcolor='rgba(42,42,42,0.42)',
                              plot_bgcolor='rgba(42,42,42,0.80)',
-                             font={'color': 'white'})
-        )
+                             font={'color': 'white'}),
+        }
 
         suave.E = copy.deepcopy(lastEvals)
         suave.P = copy.deepcopy(lastPvals)

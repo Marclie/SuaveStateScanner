@@ -115,10 +115,8 @@ def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eLow, eHigh, 
     """
 
     # set all states at points that are not valid to False
-    for state in prange(0, Evals.shape[0]):
-        # set all states less than lower bound and greater than upper bound to False
-        if not (lobound <= state < upbound):
-            validArray[state] = False
+    for state in prange(lobound, upbound):
+        validArray[state] = True
         if hasEBounds:
             if not (eLow <= Evals[state, pnt] <= eHigh):
                 validArray[state] = False
@@ -300,10 +298,11 @@ class SuaveStateScanner:
         print("\n", flush=True)
         time.sleep(1)
 
-    def generateDerivatives(self, center, F, backwards=False):
+    def generateDerivatives(self, center, validPnts, F, backwards=False):
         """
         This function approximates the n-th order derivatives of the energies and properties at a point.
         :param center: The index of the center point
+        :param validPnts: The indices of the points that are valid for the stencil
         :param F: the energies and properties of the state to be reordered and each state above it across each point
         :param backwards: whether to approximate the derivatives backwards or forwards from the center
         :return the n-th order finite differences of the energies and properties at the center point
@@ -335,7 +334,7 @@ class SuaveStateScanner:
                         break
                     if backwards:
                         idx = -idx
-                    if bounds[0] <= center + idx < bounds[1]:
+                    if bounds[0] <= center + idx < bounds[1] and center + idx in validPnts:
                         s.append(idx)
                 sN = len(s)
 
@@ -544,6 +543,8 @@ class SuaveStateScanner:
         else:
             start -= maxorder
 
+        validPnts = [i for i in range(start, end, delta) if 0 <= i < self.numPoints]
+
         modifiedStates = []
         futurePnts_copy = self.futurePnts
         for pnt in range(start, end, delta):
@@ -569,7 +570,8 @@ class SuaveStateScanner:
             if self.redundantSwaps: # if redundant swaps are allowed, start swapping states at the first state
                 swapStart = lobound
 
-            validStates = self.findValidStates(lobound, pnt, state, upbound)
+            # find valid states to compare with current state at current point
+            validStates = self.getValidStates(pnt, lobound, upbound, state)
 
             if state not in validStates: # if current state is not valid, skip it
                 continue
@@ -582,12 +584,12 @@ class SuaveStateScanner:
 
                 # nth order finite difference
                 # compare continuity differences from this state swapped with all other states
-                dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
+                dE = self.generateDerivatives(pnt, validPnts, self.E[validStates], backwards=backwards)
 
                 pTest = self.P[validStates][:,:,self.propList]
 
                 if not self.ignoreProps:
-                    dP = self.generateDerivatives(pnt, pTest, backwards=backwards)
+                    dP = self.generateDerivatives(pnt, validPnts, pTest, backwards=backwards)
                 else:
                     dP = np.ones_like(self.P[validStates, :, 0])
 
@@ -612,11 +614,11 @@ class SuaveStateScanner:
                     self.P[[state, i], pnt] = self.P[[i, state], pnt]
 
                     # nth order finite difference from swapped states
-                    dE = self.generateDerivatives(pnt, self.E[validStates], backwards=backwards)
+                    dE = self.generateDerivatives(pnt, validPnts, self.E[validStates], backwards=backwards)
                     pTest = self.P[validStates][:, :, self.propList]
 
                     if not self.ignoreProps:
-                        dP = self.generateDerivatives(pnt, pTest, backwards=backwards)
+                        dP = self.generateDerivatives(pnt, validPnts, pTest, backwards=backwards)
                     else:
                         dP = np.ones_like(self.P[validStates, :, 0])
 
@@ -663,17 +665,17 @@ class SuaveStateScanner:
             self.futurePnts = futurePnts_copy
         return modifiedStates
 
-    def findValidStates(self, lobound, pnt, ref, upbound):
+    def getValidStates(self, pnt, lobound, upbound, state):
         """
         Find states that are valid for the current point
         :param lobound: lower bound for states
         :param pnt: current point
-        :param ref: current state
+        :param state: current state
         :param upbound: upper bound for states
         :return validStates : list of valid states
         """
         validArray = np.zeros(self.numStates, dtype=bool)
-        validArray.fill(True)  # set all states to be valid
+        validArray.fill(False)  # set all states to be valid
 
 
         hasEBounds = self.eBounds is not None # check if energy bounds are specified
@@ -693,7 +695,7 @@ class SuaveStateScanner:
 
         if hasEBounds or hasEWidth or not fullRange:
             # set states outside of bounds or missing to be invalid
-            validArray = buildValidArray(validArray, self.E, lobound, pnt, ref, upbound,
+            validArray = buildValidArray(validArray, self.E, lobound, pnt, state, upbound,
                                          eLow, eHigh, eWidth, hasEBounds, hasEWidth)
         else:
             pass # if no bounds or width are specified, all states are valid

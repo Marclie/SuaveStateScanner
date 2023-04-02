@@ -59,6 +59,9 @@ def startClient(suave):
 
             html.H2("Controls", style={'text-align': 'center'}),
 
+            dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
+            dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
+
             html.Div([  # Print Selection
                 html.Label("Print Selection"),
                 dcc.Dropdown(id="print-var", value=0,
@@ -143,9 +146,6 @@ def startClient(suave):
             ], style={'display': 'inline-block', 'padding': '2px 2px 2px 2px', 'margin': 'auto'}),
         ], style={'display': 'inline-block', 'width': '100%'}),
 
-        dcc.Loading(id="loading-save", children=[html.Div(id="loading-save-out")], type="default"),
-        dcc.Loading(id="loading-reorder", children=[html.Div(id="loading-reorder-out")], type="default"),
-
         html.H2("Settings", style={'text-align': 'center'}),
 
         html.Div([  # Property List
@@ -155,6 +155,12 @@ def startClient(suave):
                           value=suave.propList, labelStyle={'display': 'inline-block', 'padding': '10px'},
                           inputStyle={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '14px'}),
             html.Div([  # make a div for all checklist options
+
+                html.Div([  # create a div for checklist interpolate missing values
+                    dcc.Checklist(id='sort-last',
+                                  options=[{'label': 'Sort by last point', 'value': 'sort-last'}],
+                                  value=False),
+                ], style={'display': 'inline-block', 'width': '33%'}),
 
                 html.Div([  # create a div for checklist interpolate missing values
                     dcc.Checklist(id='interpolate',
@@ -353,17 +359,15 @@ def startClient(suave):
         [Input('button-forwards', 'n_clicks'), Input('button-backwards', 'n_clicks'), Input('button-alternate', 'n_clicks'),
          Input('point-slider', 'value'), Input('state-slider', 'value'), Input('print-var', 'value'), Input('stencil-width', 'value'),
          Input('order-value', 'value'), Input('shuffle-button', 'n_clicks'),
-         Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('redraw', 'n_clicks'),
-         Input('prop-list', 'value'),
+         Input('interpolate', 'value'), Input('numSweeps', 'value'), Input('sort-last', 'value'),
+         Input('redraw', 'n_clicks'), Input('prop-list', 'value'),
          Input('max-pan', 'value'), Input('energy-width', 'value'), Input('redundant', 'value'),
          Input('energy-slider', 'value'),
          Input('swap-button', 'n_clicks'), Input('swap-input1', 'value'), Input('swap-input2', 'value'),
-         Input('undo', 'n_clicks'),
-         Input('stop-button', 'n_clicks'), Input('redo', 'n_clicks'), Input('remove-button', 'n_clicks'),
-         Input('remove-state-input', 'value'),
-         Input('reset-button', 'n_clicks')])
+         Input('undo', 'n_clicks'), Input('stop-button', 'n_clicks'), Input('redo', 'n_clicks'),
+         Input('remove-button', 'n_clicks'), Input('remove-state-input', 'value'), Input('reset-button', 'n_clicks')])
     def update_graph(forward_sweep_clicks,backward_sweep_clicks,alternate_sweep_clicks, point_bounds, state_bounds,
-                     print_var, stencil_width, order, shuffle_clicks, interpolative, numSweeps, redraw_clicks,
+                     print_var, stencil_width, order, shuffle_clicks, interpolative, numSweeps, sortLast, redraw_clicks,
                      prop_list, maxPan, energyWidth, redundant, energy_bounds, swap_clicks, swap1, swap2, undo_clicks,
                      stop_clicks, redo_clicks, remove_clicks, remove_state,
                      reset_clicks):
@@ -380,6 +384,7 @@ def startClient(suave):
         :param order:  the order to use for each sweep
         :param shuffle_clicks:  the number of times the shuffle button has been clicked
         :param interpolative:  whether to interpolate
+        :param sortLast:  whether to sort by the last point
         :param numSweeps:  the number of sweeps to do
         :param redraw_clicks:  the number of times the redraw button has been clicked
         :param prop_list: the properties to enforce continuity for
@@ -437,6 +442,7 @@ def startClient(suave):
         suave.width = int(stencil_width)
         suave.orders = [int(order)]  # only use one order for now
         suave.interpolate = bool(interpolative)
+        suave.sortLast = bool(sortLast)
         suave.redundantSwaps = bool(redundant)
         suave.maxPan = int(maxPan)
         suave.energyWidth = float(energyWidth)
@@ -569,9 +575,11 @@ def startClient(suave):
             sweep += 1
             for state in range(suave.numStates):
                 suave.sweepState(state, sweep, backward=back_sweep)
-            suave.analyzeSweep(lastEvals, lastPvals)
+            delMax = suave.analyzeSweep(lastEvals, lastPvals)
             if alternate_sweep:
                 back_sweep = True
+            if delMax < suave.tol:
+                break
         time.sleep(0.1)
 
         delMax = suave.analyzeSweep(lastEvals, lastPvals)

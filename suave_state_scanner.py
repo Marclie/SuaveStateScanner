@@ -204,6 +204,7 @@ class SuaveStateScanner:
         self.eBounds = None # bounds for energies to use
         self.eWidth = None # width for valid energies to swap with current state at a point
         self.interpolate = False # whether to interpolated energies during reordering
+        self.sortLast = False # whether to sort by the last point (default is to sort by the first point)
         self.keepInterp = False # whether to keep interpolated energies and properties
         self.nthreads = 1 # number of threads to use
         self.makePos = False # whether to make the properties positive
@@ -399,7 +400,8 @@ class SuaveStateScanner:
         """
         This function sorts the energies and properties of the state such that the first point is in ascending energy order.
         """
-        idx = self.E[:, 0].argsort()
+        sort_pos = 0 if not self.sortLast else -1
+        idx = self.E[:, sort_pos].argsort()
         self.E[:] = self.E[idx]
         self.P[:] = self.P[idx]
 
@@ -573,9 +575,6 @@ class SuaveStateScanner:
 
             # find valid states to compare with current state at current point
             validStates = self.getValidStates(pnt, lobound, upbound, state)
-
-            if state not in validStates: # if current state is not valid, skip it
-                continue
 
             if ~np.isfinite(self.E[state, pnt]): # if current state is missing, skip it
                 continue
@@ -851,6 +850,7 @@ class SuaveStateScanner:
             self.eBounds = data.get("eBounds", None)
             self.eWidth = data.get("eWidth", None)
             self.interpolate = data.get("interpolate", False)
+            self.sortLast = data.get("sortLast", False)
             self.keepInterp = data.get("keepInterp", False)
             self.maxStateRepeat = data.get("maxStateRepeat", -1)
             self.nthreads = data.get("nthreads", 1)

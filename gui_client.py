@@ -52,7 +52,7 @@ def startClient(suave):
 
                       },
                       style={'height': 800},
-                      config={'displayModeBar': False}
+                      config={'displayModeBar': True}
                       ),
         ]),
         html.Div([  # create a div for the buttons
@@ -149,11 +149,18 @@ def startClient(suave):
         html.H2("Settings", style={'text-align': 'center'}),
 
         html.Div([  # Property List
-            html.Label("Property List"),
+            html.Label("Property List", style={'display': 'inline-block', 'font-size': '16px', 'width': '100%'}),
+            # html.Button('Select All', id='all_props', n_clicks=0,
+            #             style={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '12px',
+            #                    'padding': '8px', 'width': '10%'}),
+            # html.Button('Select None', id='no_props', n_clicks=0,
+            #             style={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '12px',
+            #                    'padding': '8px', 'width': '10%'}),
             dcc.Checklist(id="prop-list",
                           options=[{'label': str(i + 1), 'value': i} for i in range(suave.numProps)],
                           value=suave.propList, labelStyle={'display': 'inline-block', 'padding': '10px'},
                           inputStyle={'background-color': '#1E90FF', 'color': '#222222', 'font-size': '14px'}),
+
             html.Div([  # make a div for all checklist options
 
                 html.Div([  # create a div for checklist interpolate missing values
@@ -579,9 +586,14 @@ def startClient(suave):
                 suave.sweepState(state, sweep, backward=back_sweep)
             delMax = suave.analyzeSweep(lastEvals, lastPvals)
             if alternate_sweep:
-                back_sweep = True
+                back_sweep = not back_sweep
+                suave.sortLast = back_sweep
+                suave.sortEnergies()
             if delMax < suave.tol:
                 break
+        if alternate_sweep:
+            suave.sortLast = sortLast
+            suave.sortEnergies()
         time.sleep(0.1)
 
         delMax = suave.analyzeSweep(lastEvals, lastPvals)

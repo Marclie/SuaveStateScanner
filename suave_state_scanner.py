@@ -189,72 +189,90 @@ class SuaveStateScanner:
         """
     def __init__(self, infile, outfile, numStates, configPath=None):
 
-        print("\nInput File:", infile, flush=True)
-        print("Output File:", outfile, flush=True)
-        print()
-        sys.stdout.flush()
+        print(f"\nInput File: {infile}")
+        print(f"Output File: {outfile}\n")
 
-        # save constructor parameters
+        # Save constructor parameters
         self.infile = infile
         self.outfile = outfile
         self.numStates = numStates
         self.configPath = configPath
 
-        # assign the metric function to a class variable (can be changed by the user)
+        # Assign the metric function to a class variable (can be changed by the user)
         self.getMetric = getMetric
 
-        self.hasMissing = False # flag for presence of missing data
-        self.stateMap = None # map of states to their indices
+        # Set default configuration values (refer to the GitHub page for more information)
+        self.printVar = 0
+        self.maxiter = 1000
+        self.tol = 1e-12
+        self.orders = [1]
+        self.width = 5
+        self.futurePnts = 0
+        self.maxPan = None
+        self.stateBounds = None
+        self.pntBounds = None
+        self.propList = None
+        self.ignoreProps = False
+        self.sweepBack = False
+        self.eBounds = None
+        self.eWidth = None
+        self.interpolate = False
+        self.sortLast = False
+        self.keepInterp = False
+        self.nthreads = 1
+        self.makePos = False
+        self.normalize = False
+        self.doShuffle = False
+        self.maxStateRepeat = -1
+        self.redundantSwaps = True
 
-        ### Default configuration values
-        self.printVar = 0 # index for energy or property to print
-        self.maxiter = 1000 # maximum number of iterations
-        self.tol = 1e-12 # tolerance for convergence of energy/properties
-        self.orders = [1] # orders of derivatives to use
-        self.width = 5 # stencil width
-        self.futurePnts = 0 # number of future points to use
-        self.maxPan = None # maximum pivots of stencil width
-        self.stateBounds = None # bounds for states to use
-        self.pntBounds = None # bounds for points to use
-        self.propList = None # list of properties to use
-        self.ignoreProps = False # flag for ignoring properties
-        self.sweepBack = False # whether to sweep backwards across points after reordering forwards
-        self.eBounds = None # bounds for energies to use
-        self.eWidth = None # width for valid energies to swap with current state at a point
-        self.interpolate = False # whether to interpolated energies during reordering
-        self.sortLast = False # whether to sort by the last point (default is to sort by the first point)
-        self.keepInterp = False # whether to keep interpolated energies and properties
-        self.nthreads = 1 # number of threads to use
-        self.makePos = False # whether to make the properties positive
-        self.normalize = False # whether to normalize the properties
-        self.doShuffle = False # whether to shuffle the points before reordering
-        self.maxStateRepeat = -1 # maximum number of times to repeat swapping an unmodified state
-        self.redundantSwaps = True # whether to allow redundant swaps of lower-lying states
-
-        self.interactive = False # whether to interactive the reordering
-        self.halt = False # whether to halt the reordering
+        self.interactive = False
+        self.halt = False
+        self.hasMissing = False
+        self.stateMap = None
 
         # Parse the configuration file
         self.applyConfig()
 
-        # set the number of threads
+        # Set the number of threads
         numba.set_num_threads(1 if self.nthreads is None else self.nthreads)
 
-        # parse the input file to get the energies and properties for each state at each point
+        # Parse the input file to get the energies and properties for each state at each point
         self.E, self.P, self.allPnts, self.minh = self.parseInputFile()
 
-        self.numPoints = len(self.allPnts)  # number of points
-        self.numProps = self.P.shape[2]  # number of properties
+        self.numPoints = len(self.allPnts)
+        self.numProps = self.P.shape[2]
 
-        # set the bounds to use
-        if self.pntBounds is None:
-            self.pntBounds = [0, self.numPoints]
-        if self.stateBounds is None:
-            self.stateBounds = [0, self.numStates]
-        if self.propList is None:
-            self.propList = [i for i in range(self.numProps)]
+        # Set the bounds to use
+        self.pntBounds = self.pntBounds or [0, self.numPoints]
+        self.stateBounds = self.stateBounds or [0, self.numStates]
+        self.propList = self.propList or [i for i in range(self.numProps)]
 
-        # check input for bounds. Throw error if bounds are invalid
+        if self.doShuffle:
+            self.shuffle_energy()
+        self.sortEnergies()
+
+        # Print out all the configuration values
+        self.printConfig()
+
+        # Container to count unmodified states
+        self.stateRepeatList = np.zeros(self.numStates)
+
+        # Check if any points are nan or inf
+        self.checkMissing()
+
+        # initialize parameters for the finite differences
+        self.center = None
+        self.validPnts = None
+        self.backwards = None
+        self.bounds = None
+        self.setDiff = None
+        self.combinedStencils = None
+
+    def validateBounds(self):
+        """
+        Check if the bounds are valid
+        """
         if self.pntBounds[0] >= self.pntBounds[1] - 1:
             raise ValueError("Invalid point bounds")
         if self.stateBounds[0] >= self.stateBounds[1] - 1:
@@ -263,7 +281,6 @@ class SuaveStateScanner:
             raise ValueError("Invalid energy bounds")
         if self.eWidth is not None and self.eWidth <= 0:
             raise ValueError("Invalid energy width")
-
         # check if prop list is valid
         if len(self.propList) == 0:
             print("No properties to use; ignoring properties", flush=True)
@@ -271,10 +288,31 @@ class SuaveStateScanner:
             if not (0 <= prop < self.numProps):
                 raise ValueError("Invalid property index in propList:", prop)
 
-        if self.doShuffle: # shuffle the points before reordering
-            self.shuffle_energy()
-        self.sortEnergies() # sort the states by energy of the first point
+    def checkMissing(self):
+        """
+        Check if any points are nan or inf
+        """
+        # check if any points are nan or inf
+        self.hasMissing = np.isnan(self.E).any() or np.isinf(self.E).any() or np.isnan(
+            self.P).any() or np.isinf(self.P).any()
+        if self.hasMissing:
+            print("\nWARNING: Energies or properties contain nan or inf values.")
+            if self.interpolate:
+                print("These will be ignored by interpolating over them during the optimization.")
+            else:
+                print("These will be ignored explicitly in the finite difference calculations.")
+            if self.keepInterp:
+                print("WARNING: final energies and properties will contain interpolated values.")
+            else:
+                print("Final results will not include these points.", flush=True)
 
+        print("\n", flush=True)
+        time.sleep(1)
+
+    def printConfig(self):
+        """
+        Print out all the configuration values
+        """
         # print out all the configuration values
         print("\n\n\tConfiguration Parameters:\n", flush=True)
         print("printVar", self.printVar, flush=True)
@@ -300,36 +338,7 @@ class SuaveStateScanner:
         print("\n ==> Using {} threads <==\n".format(self.nthreads), flush=True)
         print("", flush=True)
 
-        # container to count unmodified states
-        self.stateRepeatList = np.zeros(self.numStates)
-
-        # check if any points are nan or inf
-        self.hasMissing = np.isnan(self.E).any() or np.isinf(self.E).any() or np.isnan(
-            self.P).any() or np.isinf(self.P).any()
-        if self.hasMissing:
-            print("\nWARNING: Energies or properties contain nan or inf values.")
-            if self.interpolate:
-                print("These will be ignored by interpolating over them during the optimization.")
-            else:
-                print("These will be ignored explicitly in the finite difference calculations.")
-            if self.keepInterp:
-                print("WARNING: final energies and properties will contain interpolated values.")
-            else:
-                print("Final results will not include these points.", flush=True)
-
-        print("\n", flush=True)
-        time.sleep(1)
-
-        # initialize parameters for the finite differences
-        self.center = None
-        self.validPnts = None
-        self.backwards = None
-        self.bounds = None
-        self.setDiff = None
-        self.combinedStencils = None
-
-
-    def initialize_variables(self, center, validPnts, backwards):
+    def setDiffVars(self, center, validPnts, backwards):
         """
         Initialize variables for the finite difference calculation
         :param center: center point
@@ -362,7 +371,7 @@ class SuaveStateScanner:
         :param backwards: whether to approximate the derivatives backwards or forwards from the center
         :return the n-th order finite differences of the energies and properties at the center point
         """
-        self.initialize_variables(center, validPnts, backwards)
+        self.setDiffVars(center, validPnts, backwards)
         self.process_orders()
 
         if not self.setDiff:
@@ -1042,7 +1051,6 @@ class SuaveStateScanner:
         This creates an interactive session for the user to manipulate the states
         @requires: Plotly, dash
         """
-
         startClient(self)
 
 

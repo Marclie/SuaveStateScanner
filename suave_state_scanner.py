@@ -26,28 +26,9 @@ from numba import njit, prange
 from numpy import zeros, stack, insert, savetxt, inf, genfromtxt
 import scipy.interpolate as interpolate
 
-from nstencil import makeStencil
+from nstencil import makeStencil, approxDeriv
 from suave_metric import getMetric
 from gui_client import startClient
-
-@njit(parallel=True, fastmath=False, nogil=True, cache=True)
-def approxDeriv(F, diff, center, stencil, alphas, sN):
-    """
-    This function approximates the n-th order derivatives of the energies and properties
-           at a point for a given stencil size.
-    :param F: the energies and properties of the state to be reordered and each state above it across each point
-    :param diff: the finite differences of the energies and properties at the center point
-    :param center: the index of the point to approximate the derivatives at
-    :param stencil: the stencil to use in the finite difference approximation
-    :param alphas: the coefficients of the stencil to use in the finite difference approximation
-    :param sN: the size of the stencil to use in the finite difference approximation
-    :return the n-th order finite differences of the energies and properties at the center point with the current stencil
-    """
-
-    # evaluate finite difference terms for each state
-    for s in prange(sN):
-        pnt = center + stencil[s]
-        diff[:, s] = alphas[s] * F[:, pnt]
 
 @njit(parallel=True, fastmath=True, nogil=True, cache=True)
 def stateDifference(Evals, Pvals, stateEvals, statePvals, state):

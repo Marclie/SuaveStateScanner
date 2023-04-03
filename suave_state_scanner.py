@@ -88,6 +88,23 @@ def combineVals(Evals, Pvals, allPnts, tempInput):
             for feat in prange(numFeat):
                 tempInput[pnt * numStates + state, feat + 2] = Pvals[state, pnt, feat]
 
+def initialize_diff(F, nStates, sN):
+    """
+    Initialize the array to store the finite differences
+    :param F: the energies or properties of the state to be reordered and each state above it across each point
+    :param nStates: The number of states
+    :param sN: The number of stencil points
+    :return:
+    """
+    if len(F.shape) == 3:
+        num_props = F.shape[2]
+        diff = zeros((nStates, sN, num_props))
+    elif len(F.shape) == 2:
+        diff = zeros((nStates, sN))
+    else:
+        raise ValueError("energies and/or features have incompatible dimensions")
+    return diff
+
 def mergediff(diff):
     """
     This function will merge the finite differences for the energy and properties
@@ -171,6 +188,7 @@ class SuaveStateScanner:
         :param configPath : The path of the configuration file for setting stencil properties
         """
     def __init__(self, infile, outfile, numStates, configPath=None):
+
         print("\nInput File:", infile, flush=True)
         print("Output File:", outfile, flush=True)
         print()
@@ -302,6 +320,39 @@ class SuaveStateScanner:
         print("\n", flush=True)
         time.sleep(1)
 
+        # initialize parameters for the finite differences
+        self.center = None
+        self.validPnts = None
+        self.backwards = None
+        self.bounds = None
+        self.setDiff = None
+        self.combinedStencils = None
+
+
+    def initialize_variables(self, center, validPnts, backwards):
+        """
+        Initialize variables for the finite difference calculation
+        :param center: center point
+        :param validPnts: valid points
+        :param backwards: whether to approximate the derivatives backwards or forwards from the center
+        """
+
+        self.center = center
+        self.validPnts = validPnts
+        self.backwards = backwards
+        self.bounds = self.pntBounds
+        self.setDiff = False
+        self.combinedStencils = {}
+
+        if self.orders is None:
+            self.orders = [1]
+        if self.width <= 1 or self.width > self.bounds[1]:
+            self.width = self.bounds[1]
+        if self.maxPan is None:
+            self.maxPan = self.bounds[1]
+        if self.futurePnts is None:
+            self.futurePnts = 0
+
     def generateDerivatives(self, center, validPnts, F, backwards=False):
         """
         This function approximates the n-th order derivatives of the energies and properties at a point.
@@ -311,83 +362,19 @@ class SuaveStateScanner:
         :param backwards: whether to approximate the derivatives backwards or forwards from the center
         :return the n-th order finite differences of the energies and properties at the center point
         """
-        bounds = self.pntBounds
-        if self.orders is None:
-            self.orders = [1]
-        if self.width <= 1 or self.width > bounds[1]:
-            self.width = bounds[1]
-        if self.maxPan is None:
-            self.maxPan = bounds[1]
-        if self.futurePnts is None:
-            self.futurePnts = 0
+        self.initialize_variables(center, validPnts, backwards)
+        self.process_orders()
 
-        combinedStencils = {}
-        setDiff = False
+        if not self.setDiff:
+            raise ValueError(
+                "No finite difference coefficients were computed. Try increasing the width of the stencil.")
 
-        for order in self.orders:
-            offCount = 0
-
-            for off in range(-self.width, 1):
-                if offCount >= self.maxPan:
-                    continue
-                # get size of stencil
-                s = []
-                for i in range(self.width):
-                    idx = (i + off)
-                    if idx > self.futurePnts:
-                        break
-                    if backwards:
-                        idx = -idx
-                    if bounds[0] <= center + idx < bounds[1] and center + idx in validPnts:
-                        s.append(idx)
-                sN = len(s)
-
-                # ensure stencil is large enough for finite difference and not larger than data set
-                if sN <= order or sN > bounds[1] or sN <= 1:
-                    continue
-
-                # ensure center point is included in stencil
-                s = np.asarray(s)  # convert to np array
-                if 0 not in s:
-                    continue
-
-                # scale stencil to potentially non-uniform mesh based off smallest point spacing
-                sh = zeros(sN)
-                for idx in range(sN):
-                    sh[idx] = (self.allPnts[center + s[idx]] - self.allPnts[center]) / self.minh
-                sh.flags.writeable = False
-
-                # get finite difference coefficients from stencil points
-                alpha = makeStencil(sh, order)
-
-                # collect finite difference coefficients from this stencil
-                h_n = self.minh ** order
-                for idx in range(sN):
-                    try:
-                        combinedStencils[s[idx]] += alpha[idx] / h_n
-                    except KeyError:
-                        combinedStencils[s[idx]] = alpha[idx] / h_n
-
-                # mark if any finite difference coefficients have yet been computed
-                if not setDiff:
-                    setDiff = True
-                offCount += 1
-
-        if not setDiff:
-            raise ValueError("No finite difference coefficients were computed. Try increasing the width of the stencil.")
-
-        stencils = np.asarray(list(combinedStencils.items()), dtype=np.float32)
-        stencil = stencils[:, 0].astype(int)
-        alphas = stencils[:, 1]
-        sN = len(combinedStencils)
-        nStates = F.shape[0]
-        if len(F.shape) == 3:
-            num_props = F.shape[2]
-            diff = zeros((nStates, sN, num_props))
-        elif len(F.shape) == 2:
-            diff = zeros((nStates, sN))
-        else:
-            raise "energies and/or features have incompatible dimensions"
+        stencils = np.asarray(list(self.combinedStencils.items()), dtype=np.float32) # convert to numpy array
+        stencil = stencils[:, 0].astype(int) # stencil sizes
+        alphas = stencils[:, 1] # finite difference coefficients
+        sN = len(self.combinedStencils) # number of stencils
+        nStates = F.shape[0] # number of states
+        diff = initialize_diff(F, nStates, sN) # initialize the derivatives
 
         # compute combined finite differences from all stencils considered in panning window
         approxDeriv(F, diff, center, stencil, alphas, sN)
@@ -395,8 +382,89 @@ class SuaveStateScanner:
         if self.hasMissing and not self.interpolate:
             # interpolate derivatives at missing points (not interpolating energies or properties)
             diff = interpolateDerivatives(diff)
-        return mergediff(diff)
 
+        return mergediff(diff) # return the sum of finite derivatives for each offset
+
+    def calculate_stencil_size(self, off):
+        """
+        Calculate the stencil size for a given offset.
+        :param off: offset
+        :return: stencil size
+        """
+        s = [] # stencil
+        for i in range(self.width):
+            idx = (i + off) # index at offset
+            if idx > self.futurePnts:
+                break # stop if we are past points that will be swapped in the future
+            if self.backwards:
+                idx = -idx # if we are going backwards, make the index negative
+
+            # index is valid if it is within the bounds and is a valid point
+            if self.bounds[0] <= self.center + idx < self.bounds[1] \
+                    and self.center + idx in self.validPnts:
+                s.append(idx) # add the index to the stencil if it is valid
+        return s # return the stencil
+
+    def scale_stencil(self, s):
+        """
+        Scale the stencil points to match the minimum spacing between points
+        :param s: stencil points
+        :return: scaled stencil points
+        """
+        sN = len(s)
+        sh = zeros(sN)
+        for idx in range(sN): # scale stencil points to match the minimum spacing between points
+            sh[idx] = (self.allPnts[self.center + s[idx]] - self.allPnts[self.center]) / self.minh
+        sh.flags.writeable = False # make stencil points immutable
+        return sh
+
+    def compute_finite_difference_coefficients(self, s, order):
+        """
+        Compute the finite difference coefficients for a given stencil and order
+        :param s: stencil points
+        :param order: order of the finite difference
+        """
+        # get finite difference coefficients from stencil points
+        sh = self.scale_stencil(s)
+        alpha = makeStencil(sh, order)
+
+        # collect finite difference coefficients from this stencil
+        h_n = self.minh ** order # h^n
+        for idx in range(len(s)):
+            try:
+                self.combinedStencils[s[idx]] += alpha[idx] / h_n # add to existing stencil if it exists
+            except KeyError:
+                self.combinedStencils[s[idx]] = alpha[idx] / h_n # create new stencil if it does not exist
+
+    def process_orders(self):
+        """
+        Process the various orders to use as finite difference coefficients
+        :return: True if any finite difference coefficients were computed, False otherwise
+        """
+        self.setDiff = False
+        for order in self.orders:
+            offCount = 0
+            for off in range(-self.width, 1):
+                if offCount >= self.maxPan:
+                    continue
+
+                s = self.calculate_stencil_size(off)
+                sN = len(s)
+
+                if sN <= order or sN > self.bounds[1] or sN <= 1:
+                    continue # stencil is too small or too large
+
+                s = np.asarray(s)  # convert to np array
+
+                if 0 not in s:
+                    continue # stencil does not contain the center point
+
+                self.compute_finite_difference_coefficients(s, order) # compute finite difference coefficients
+
+                if not self.setDiff:
+                    self.setDiff = True # set flag to indicate that finite difference coefficients were computed
+
+                offCount += 1
 
     def sortEnergies(self):
         """
@@ -830,9 +898,6 @@ class SuaveStateScanner:
             newCurves = stack(newCurvesList, axis=1)
             newCurves = insert(newCurves, 0, self.allPnts, axis=0)
             savetxt(self.outfile, newCurves, fmt='%20.12f')
-
-
-
 
     def applyConfig(self):
         """

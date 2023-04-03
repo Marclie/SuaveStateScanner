@@ -126,6 +126,7 @@ The configuration file is in JSON format. The following is an example configurat
         "keepInterp": false,
         "nthreads": 1,
         "makePos": false,
+        "normalize": false,
         "doShuffle": false,
         "maxStateRepeat": -1,
         "redundantSwaps": true
@@ -216,13 +217,11 @@ All configurations in the configuration file are optional and are defined as fol
 
 * `nthreads` - The number of numba threads to use (default: 1)
 
-
-* `makePos` - Whether to make all extracted properties positive before sorting according to increasing energy
-  eigenvalue along each curve/trajectory/reaction path segment sampled during electronic structure calculations or other
-  types of calculations from which data was obtained as input to the [SuaveStateScanner](#introduction) program. Making properties positive
-  can sometimes improve performance on data processed by [SuaveStateScanner](#introduction) as input but isn't strictly necessary so
+* `makePos` - Whether to make all extracted properties positive when sorting. Making properties positive
+  can sometimes improve performance on data processed by [SuaveStateScanner](#introduction) but isn't strictly necessary so
   default value is False. (default: False)
 
+* `normalize` - Whether to normalize extracted properties when sorting. (default: False)
 
 * `doShuffle` - Whether to shuffle order or energy eigenvalues along each curve sampled from electronic
   structure calculations or other types of calculations. Shuffling can sometimes improve performance on data processed

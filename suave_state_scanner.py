@@ -208,6 +208,7 @@ class SuaveStateScanner:
         self.keepInterp = False # whether to keep interpolated energies and properties
         self.nthreads = 1 # number of threads to use
         self.makePos = False # whether to make the properties positive
+        self.normalize = False # whether to normalize the properties
         self.doShuffle = False # whether to shuffle the points before reordering
         self.maxStateRepeat = -1 # maximum number of times to repeat swapping an unmodified state
         self.redundantSwaps = True # whether to allow redundant swaps of lower-lying states
@@ -276,6 +277,7 @@ class SuaveStateScanner:
         print("maxStateRepeat", self.maxStateRepeat, flush=True)
         print("keepInterp", self.keepInterp, flush=True)
         print("makePos", self.makePos, flush=True)
+        print("normalize", self.normalize, flush=True)
         print("doShuffle", self.doShuffle, flush=True)
         print("\n ==> Using {} threads <==\n".format(self.nthreads), flush=True)
         print("", flush=True)
@@ -584,6 +586,10 @@ class SuaveStateScanner:
                 dE = self.generateDerivatives(pnt, validPnts, self.E[validStates], backwards=backwards)
 
                 pTest = self.P[validStates][:,:,self.propList]
+                if self.makePos:
+                    pTest = np.abs(pTest)
+                if self.normalize:
+                    pTest = pTest / np.sum(pTest)
 
                 if not self.ignoreProps:
                     dP = self.generateDerivatives(pnt, validPnts, pTest, backwards=backwards)
@@ -613,6 +619,10 @@ class SuaveStateScanner:
                     # nth order finite difference from swapped states
                     dE = self.generateDerivatives(pnt, validPnts, self.E[validStates], backwards=backwards)
                     pTest = self.P[validStates][:, :, self.propList]
+                    if self.makePos:
+                        pTest = np.abs(pTest)
+                    if self.normalize:
+                        pTest = pTest / np.linalg.norm(pTest)
 
                     if not self.ignoreProps:
                         dP = self.generateDerivatives(pnt, validPnts, pTest, backwards=backwards)
@@ -852,6 +862,7 @@ class SuaveStateScanner:
             self.maxStateRepeat = data.get("maxStateRepeat", -1)
             self.nthreads = data.get("nthreads", 1)
             self.makePos = data.get("makePos", False)
+            self.normalize = data.get("normalize", False)
             self.doShuffle = data.get("doShuffle", False)
             self.redundantSwaps = data.get("redundantSwaps", False)
         if self.width <= 0 or self.width <= max(self.orders):
@@ -898,8 +909,6 @@ class SuaveStateScanner:
         Evals = curves[:, :, 1]
         Pvals = curves[:, :, 2:]
 
-        if self.makePos:
-            Pvals = abs(Pvals)
         if self.printVar > numColumns - 1:
             raise ValueError("Invalid printVar index. Must be less than the number of columns "
                              "in the input file (excluding the reaction coordinate).")
@@ -1002,7 +1011,8 @@ if __name__ == "__main__":
                             "keepInterp:\n\twhether to keep the interpolated missing points in the output file\n"
                             "maxStateRepeat:\n\tmaximum number of times a state can be re-swapped without it changing\n"
                             "nthreads:\n\tnumber of numba threads to use\n"
-                            "makePos:\n\twhether to make all extracted properties positive before sorting\n"
+                            "makePos:\n\twhether to make all extracted properties positive when sorting\n"
+                            "normalize:\n\twhether to normalize the extracted properties when sorting\n"
                             "doShuffle:\n\twhether to shuffle order or energy eigenvalues along each curve\n"
                             "redundantSwaps:\n\twhether to allow redundant swaps\n\n"
                             "See the documentation for more information on these parameters.\n\n"

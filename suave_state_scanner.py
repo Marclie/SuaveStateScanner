@@ -973,11 +973,41 @@ class SuaveStateScanner:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Suave State Scanner")
-    parser.add_argument("in_file", help="input file")
-    parser.add_argument("out_file", help="output file")
+    parser = argparse.ArgumentParser(description="Suave State Scanner", formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("in_file", help="input file that contains the data in the format:\n"
+                                        "\trc1 energy1 feature1.1 feature1.2 ---> \n"
+                                        "\trc1 energy2 feature2.1 feature2.2 ---> \n"
+                                        "\trc2 energy1 feature1.1 feature1.2 ---> \n"
+                                        "\trc2 energy2 feature2.1 feature2.2 ---> \n\n")
+    parser.add_argument("out_file", help="output file that will store the final results")
     parser.add_argument("num_states", type=int, help="number of states in the input data")
-    parser.add_argument("-c", "--config", dest="config_path", help="configuration file")
+
+    # optional arguments
+    parser.add_argument("-c", "--config", dest="config_path",
+                        help="\n"
+                            "configuration file path (optional). parameters are:\n\n"
+                            "printVar:\n\tindex of property to print\n"
+                            "interactive:\n\twhether to run in interactive mode\n"
+                            "orders:\n\torders of derivatives to compute\n"
+                            "width:\n\twidth of stencil\n"
+                            "futurePnts:\n\tnumber of points from the right of the center that is included in the stencils\n"
+                            "maxPan:\n\tmaximum number of times the stencil of size width can pivot around the center point\n"
+                            "pntBounds:\n\tbounds of the points in the input file\n"
+                            "propList:\n\tlist of the indices of the properties to enforce continuity for\n"
+                            "sweepBack:\n\twhether to sweep backwards through the points after it has finished sweeping forwards\n"
+                            "stateBounds:\n\tbounds of the states in the input file\n"
+                            "eBounds:\n\tbounds of the energies in the input file\n"
+                            "eWidth:\n\tenergy width for valid energies to swap with current state at a point\n"
+                            "interpolate:\n\twhether to linearly interpolate over nan or inf values\n"
+                            "keepInterp:\n\twhether to keep the interpolated missing points in the output file\n"
+                            "maxStateRepeat:\n\tmaximum number of times a state can be re-swapped without it changing\n"
+                            "nthreads:\n\tnumber of numba threads to use\n"
+                            "makePos:\n\twhether to make all extracted properties positive before sorting\n"
+                            "doShuffle:\n\twhether to shuffle order or energy eigenvalues along each curve\n"
+                            "redundantSwaps:\n\twhether to allow redundant swaps\n\n"
+                            "See the documentation for more information on these parameters.\n\n"
+                        )
+
 
     args = parser.parse_args()
 

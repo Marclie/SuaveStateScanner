@@ -338,6 +338,9 @@ class SuaveStateScanner:
         print("\n ==> Using {} threads <==\n".format(self.nthreads), flush=True)
         print("", flush=True)
 
+
+    ############################### Finite Difference Functions ###############################
+
     def setDiffVars(self, center, validPnts, backwards):
         """
         Initialize variables for the finite difference calculation
@@ -474,6 +477,10 @@ class SuaveStateScanner:
                     self.setDiff = True # set flag to indicate that finite difference coefficients were computed
 
                 offCount += 1
+
+
+    ############################### State Reordering Functions ###############################
+
 
     def sortEnergies(self):
         """
@@ -827,8 +834,6 @@ class SuaveStateScanner:
                 count += 1
 
         print("Done\n", flush=True)
-            
-            
     
 
     # This function will randomize the state ordering for each point
@@ -849,6 +854,11 @@ class SuaveStateScanner:
             self.P[:, pnt, :] = self.P[idx, pnt, :] # shuffle properties
             if self.stateMap is not None:
                 self.stateMap[:, pnt] = self.stateMap[idx, pnt] # shuffle stateMap
+
+
+
+    ############################### Functions for saving and loading state information ###############################
+
 
 
     # this function loads the state information of a reorder scan from a previous run of this script

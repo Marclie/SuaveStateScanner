@@ -30,128 +30,7 @@ from nstencil import makeStencil, approxDeriv
 from suave_metric import getMetric
 from gui_client import startClient
 
-@njit(parallel=True, fastmath=True, nogil=True, cache=True)
-def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
-    """
-    This function will calculate the difference in the energy from a previous reordering to the current order
-    :param Evals: The energy values for the current order
-    :param Pvals: The properties for the current order
-    :param stateEvals: The energy values for the previous order
-    :param statePvals: The properties for the previous order
-    :param state: The state that is being compared
-
-    :return delMax: The maximum difference between the current and previous order
-    """
-
-    delEval = Evals[state] - stateEvals[state]
-    delNval = Pvals[state] - statePvals[state]
-    delMax = delEval.max() + delNval.max()
-    return delMax
-
-@njit(parallel=True, fastmath=True, nogil=True, cache=True)
-def combineVals(Evals, Pvals, allPnts, tempInput):
-    """
-    This function will reformat the state information for saving
-    :param Evals: The energy values for the current order
-    :param Pvals: The properties for the current order
-    :param allPnts: The points that are being evaluated
-    :param tempInput: The input file for the current run
-    :return The energy and properties for each state at each point
-    """
-
-    numPoints = allPnts.shape[0]
-    numStates = Evals.shape[0]
-    numFeat = Pvals.shape[2]
-    for pnt in prange(numPoints):
-        for state in prange(numStates):
-            tempInput[pnt * numStates + state, 0] = allPnts[pnt]
-            tempInput[pnt * numStates + state, 1] = Evals[state, pnt]
-            for feat in prange(numFeat):
-                tempInput[pnt * numStates + state, feat + 2] = Pvals[state, pnt, feat]
-
-def initialize_diff(F, nStates, sN):
-    """
-    Initialize the array to store the finite differences
-    :param F: the energies or properties of the state to be reordered and each state above it across each point
-    :param nStates: The number of states
-    :param sN: The number of stencil points
-    :return:
-    """
-    if len(F.shape) == 3:
-        num_props = F.shape[2]
-        diff = zeros((nStates, sN, num_props))
-    elif len(F.shape) == 2:
-        diff = zeros((nStates, sN))
-    else:
-        raise ValueError("energies and/or features have incompatible dimensions")
-    return diff
-
-def mergediff(diff):
-    """
-    This function will merge the finite differences for the energy and properties
-    :param diff: The finite differences for the energy and properties
-    :return The merged finite differences
-    """
-    return np.absolute(diff.sum(axis=1))
-
-
-@njit(parallel=True, fastmath=True, nogil=True, cache=True)
-def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eLow, eHigh, eWidth, hasEBounds, hasEWidth):
-    """
-    This function will build the valid array for the current point
-    :param validArray: The array of valid states
-    :param Evals: The energy values for the current order
-    :param lobound: The lower bound for the current point
-    :param pnt: The current point
-    :param ref: The reference point
-    :param upbound: The upper bound for the current point
-    :param eLow: The lower bound for the energy
-    :param eHigh: The upper bound for the energy
-    :param eWidth: The energy width for the current point
-    :param hasEBounds: Whether the energy bounds are being used
-    :param hasEWidth: Whether the energy width is being used
-    :return The valid array for the current point
-    """
-
-    # set all states at points that are not valid to False
-    for state in prange(lobound, upbound):
-        validArray[state] = True
-        if hasEBounds:
-            if not (eLow <= Evals[state, pnt] <= eHigh):
-                validArray[state] = False
-        if hasEWidth:
-            if eWidth < abs(Evals[ref, pnt] - Evals[state, pnt]):
-                validArray[state] = False
-
-    return validArray
-
-def stringToList(string):
-    """
-    this function will convert a string to a list of integers
-    :return
-    """
-    return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
-
-
-def interpolateDerivatives(diff):
-    """
-    Interpolate the derivatives using the given stencil
-    :param diff: derivatives
-    :return interpolated derivatives
-    """
-
-    # interpolate the derivatives
-    diff_shape = diff.shape
-    flat_diff = diff.flatten()
-
-    # get the indices of non-missing values
-    idx = np.where(np.isfinite(flat_diff))[0]
-
-    # interpolate the missing values over points
-    flat_diff = interpolate.interp1d(idx, flat_diff[idx], kind='previous', fill_value='extrapolate')(np.arange(flat_diff.size))
-
-    return flat_diff.reshape(diff_shape)
-
+################################################################################################################
 
 class SuaveStateScanner:
     """
@@ -1043,6 +922,134 @@ class SuaveStateScanner:
         @requires: Plotly, dash
         """
         startClient(self)
+
+################################################################################################################
+
+############################### Static Functions ###############################
+
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
+def stateDifference(Evals, Pvals, stateEvals, statePvals, state):
+    """
+    This function will calculate the difference in the energy from a previous reordering to the current order
+    :param Evals: The energy values for the current order
+    :param Pvals: The properties for the current order
+    :param stateEvals: The energy values for the previous order
+    :param statePvals: The properties for the previous order
+    :param state: The state that is being compared
+
+    :return delMax: The maximum difference between the current and previous order
+    """
+
+    delEval = Evals[state] - stateEvals[state]
+    delNval = Pvals[state] - statePvals[state]
+    delMax = delEval.max() + delNval.max()
+    return delMax
+
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
+def combineVals(Evals, Pvals, allPnts, tempInput):
+    """
+    This function will reformat the state information for saving
+    :param Evals: The energy values for the current order
+    :param Pvals: The properties for the current order
+    :param allPnts: The points that are being evaluated
+    :param tempInput: The input file for the current run
+    :return The energy and properties for each state at each point
+    """
+
+    numPoints = allPnts.shape[0]
+    numStates = Evals.shape[0]
+    numFeat = Pvals.shape[2]
+    for pnt in prange(numPoints):
+        for state in prange(numStates):
+            tempInput[pnt * numStates + state, 0] = allPnts[pnt]
+            tempInput[pnt * numStates + state, 1] = Evals[state, pnt]
+            for feat in prange(numFeat):
+                tempInput[pnt * numStates + state, feat + 2] = Pvals[state, pnt, feat]
+
+def initialize_diff(F, nStates, sN):
+    """
+    Initialize the array to store the finite differences
+    :param F: the energies or properties of the state to be reordered and each state above it across each point
+    :param nStates: The number of states
+    :param sN: The number of stencil points
+    :return:
+    """
+    if len(F.shape) == 3:
+        num_props = F.shape[2]
+        diff = zeros((nStates, sN, num_props))
+    elif len(F.shape) == 2:
+        diff = zeros((nStates, sN))
+    else:
+        raise ValueError("energies and/or features have incompatible dimensions")
+    return diff
+
+def mergediff(diff):
+    """
+    This function will merge the finite differences for the energy and properties
+    :param diff: The finite differences for the energy and properties
+    :return The merged finite differences
+    """
+    return np.absolute(diff.sum(axis=1))
+
+
+@njit(parallel=True, fastmath=True, nogil=True, cache=True)
+def buildValidArray(validArray, Evals, lobound, pnt, ref, upbound, eLow, eHigh, eWidth, hasEBounds, hasEWidth):
+    """
+    This function will build the valid array for the current point
+    :param validArray: The array of valid states
+    :param Evals: The energy values for the current order
+    :param lobound: The lower bound for the current point
+    :param pnt: The current point
+    :param ref: The reference point
+    :param upbound: The upper bound for the current point
+    :param eLow: The lower bound for the energy
+    :param eHigh: The upper bound for the energy
+    :param eWidth: The energy width for the current point
+    :param hasEBounds: Whether the energy bounds are being used
+    :param hasEWidth: Whether the energy width is being used
+    :return The valid array for the current point
+    """
+
+    # set all states at points that are not valid to False
+    for state in prange(lobound, upbound):
+        validArray[state] = True
+        if hasEBounds:
+            if not (eLow <= Evals[state, pnt] <= eHigh):
+                validArray[state] = False
+        if hasEWidth:
+            if eWidth < abs(Evals[ref, pnt] - Evals[state, pnt]):
+                validArray[state] = False
+
+    return validArray
+
+def stringToList(string):
+    """
+    this function will convert a string to a list of integers
+    :return
+    """
+    return string.replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "").split(",")
+
+
+def interpolateDerivatives(diff):
+    """
+    Interpolate the derivatives using the given stencil
+    :param diff: derivatives
+    :return interpolated derivatives
+    """
+
+    # interpolate the derivatives
+    diff_shape = diff.shape
+    flat_diff = diff.flatten()
+
+    # get the indices of non-missing values
+    idx = np.where(np.isfinite(flat_diff))[0]
+
+    # interpolate the missing values over points
+    flat_diff = interpolate.interp1d(idx, flat_diff[idx], kind='previous', fill_value='extrapolate')(np.arange(flat_diff.size))
+
+    return flat_diff.reshape(diff_shape)
+
+################################################################################################################
 
 
 if __name__ == "__main__":

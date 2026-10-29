@@ -14,7 +14,7 @@
     "eWidth": null,
     "interpolate": false,
     "keepInterp": false,
-    "nthreads": 1,
+    "nthreads": 8,
     "makePos": false,
     "doShuffle": false,
     "maxStateRepeat": -1,

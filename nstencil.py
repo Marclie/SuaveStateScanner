@@ -72,7 +72,7 @@ def makeStencil(s, d):
     '''
 
     N = len(s)
-    hashID = hash((N, s.tostring(), d))
+    hashID = hash((N, s.tobytes(), d))
     try:
         alpha = savedAlpha[hashID]
     except KeyError:

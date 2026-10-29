@@ -62,6 +62,34 @@ The `temp_out.csv` file stores the output at any given iteration for the states,
 ```
 
 
+
+Interactive GUI Usage
+---------------------
+
+SuaveStateScanner includes a modern, high-performance web GUI for interactive curve inspection, manual state swapping, and automated continuity reordering with real-time live curve updates on a single node.
+
+### Launching the Modern GUI
+To start the interactive GUI:
+``` bash
+# Launch with default dataset and configuration
+python suave_gui_runner.py
+
+# Or launch directly with custom dataset or state count
+python suave_gui_runner.py --infile input.csv --num-states 9 --config suave.json
+
+```
+Open your browser at `http://127.0.0.1:8050/`.
+
+### GUI Features & Capabilities
+* **In-GUI Data Loading**: Upload files via drag-and-drop or local file path picker. The inspector automatically detects rows, columns, and candidate state divisors.
+* **Persistent Zoom & Viewport**: Powered by Plotly WebGL (`Scattergl`), zoom and pan coordinates are preserved across all state manipulations and redraws.
+* **Manual State Swapping**: Swap degenerate states over a selected reaction coordinate window with a single click.
+* **Non-Destructive History**: Comprehensive Multi-level Undo & Redo stack records all operations.
+* **Automated Continuity Sweeps**: Execute forward, backward, or alternate derivative sweeps asynchronously without freezing the interface.
+* **Single-Node Asynchronous Sweeps**: Background thread execution updates the displayed curves continuously in real time without blocking the Dash UI.
+* **Direct Data Export**: Download rearranged curves or standard checkpoint CSVs directly from the header controls.
+
+
 Arguments
 ---------
 

@@ -19,7 +19,34 @@ import copy
 import time
 import numpy as np
 
-def startClient(suave):
+def startClient(suave, use_legacy: bool = False):
+    """
+    This function starts the client for the SuaveStateScanner to visualize and interact with the results.
+    NOTE: gui_client.py is deprecated in favor of the modular suave_gui package.
+    """
+    if not use_legacy:
+        import warnings
+        warnings.warn(
+            "gui_client.py:startClient is deprecated. Launching modern suave_gui application. "
+            "To use the legacy client, pass use_legacy=True.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        try:
+            from suave_gui.app import create_app
+
+            app = create_app(
+                suave_instance=suave,
+                default_dataset_path=getattr(suave, "infile", None),
+                default_num_states=getattr(suave, "numStates", 9),
+                default_config_path=getattr(suave, "configPath", None),
+            )
+            app.run(debug=False)
+            return
+        except Exception as err:
+            import warnings
+            warnings.warn(f"Could not initialize modern suave_gui ({err}), falling back to legacy client.", RuntimeWarning)
+
     """
     This function starts the client for the SuaveStateScanner to visualize and interact with the results
     :param suave: the SuaveStateScanner object

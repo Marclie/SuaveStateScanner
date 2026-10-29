@@ -129,6 +129,8 @@ class SuaveStateScanner:
         self.bounds = None
         self.setDiff = None
         self.combinedStencils = None
+        self.currentPoint = None
+        self.currentState = None
 
     def validateBounds(self):
         """
@@ -493,6 +495,8 @@ class SuaveStateScanner:
         modifiedStates = []
         futurePnts_copy = self.futurePnts
         for pnt in range(start, end, delta):
+            self.currentPoint = pnt
+            self.currentState = state
 
             set_off = abs(pnt - start) <= maxorder
             if set_off:
@@ -615,6 +619,8 @@ class SuaveStateScanner:
                 print(lastDif, flush=True)
             sys.stdout.flush()
             self.futurePnts = futurePnts_copy
+        self.currentPoint = None
+        self.currentState = None
         return modifiedStates
 
     def getValidStates(self, pnt, lobound, upbound, state):

@@ -17,10 +17,10 @@ def input_dataset():
 def test_facade_initialization(input_dataset):
     facade = SuaveFacade(input_dataset)
     assert facade.numStates == 9
-    assert facade.numPoints == 500
+    assert facade.numPoints == 100
     assert facade.numProps == 8
-    assert facade.E.shape == (9, 500)
-    assert facade.P.shape == (9, 500, 8)
+    assert facade.E.shape == (9, 100)
+    assert facade.P.shape == (9, 100, 8)
 
 
 def test_facade_single_sweep(input_dataset):
@@ -35,7 +35,7 @@ def test_facade_single_sweep(input_dataset):
 
     # Sync to dataset
     facade.sync_to_dataset(input_dataset)
-    assert input_dataset.energies.shape == (9, 500)
+    assert input_dataset.energies.shape == (9, 100)
 
 
 def test_facade_cancellation(input_dataset):

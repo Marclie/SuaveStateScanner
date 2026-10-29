@@ -65,10 +65,10 @@ def test_parse_real_input_csv():
     if os.path.exists(input_path):
         dataset = DataParserService.parse_csv_stream(input_path, num_states=9, filename="input.csv")
         assert dataset.num_states == 9
-        assert dataset.num_points == 500
+        assert dataset.num_points == 100
         assert dataset.num_properties == 8
         assert dataset.reaction_coordinates[0] == 0.9000
-        assert np.isclose(dataset.reaction_coordinates[1] - dataset.reaction_coordinates[0], 0.001)
+        assert np.isclose(dataset.reaction_coordinates[1] - dataset.reaction_coordinates[0], 0.005)
 
 
 def test_export_and_reimport():

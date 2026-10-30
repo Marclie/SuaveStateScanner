@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+checkpoint.csv
+temp_out.csv
+output.csv
+output_sync_test.csv
+temp_uploaded.csv
+.pytest_cache/

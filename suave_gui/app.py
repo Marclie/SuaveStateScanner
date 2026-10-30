@@ -24,6 +24,7 @@ from suave_gui.components.file_modal import create_file_modal
 from suave_gui.components.save_modal import create_save_modal
 from suave_gui.components.sidebar_controls import create_sidebar_controls
 from suave_gui.components.status_bar import create_status_bar
+from suave_gui.components.tooltip_helper import create_tooltip
 from suave_gui.state.session_store import SessionRegistry, SessionContext
 
 
@@ -105,42 +106,82 @@ def create_app(
                     },
                     children=[
                         dmc.Group(gap="sm", children=[
-                            dmc.Text("SuaveStateScanner", fw=700, size="lg"),
-                            dmc.Badge("Single-Node", color="blue", variant="filled", size="sm"),
+                            create_tooltip(
+                                dmc.Text("SuaveStateScanner", fw=700, size="lg"),
+                                title="SuaveStateScanner",
+                                description=(
+                                    "A specialized tool for excited electronic state labeling, continuity enforcement, "
+                                    "and avoided-crossing resolution along reaction coordinates using finite differences."
+                                ),
+                                position="bottom",
+                            ),
+                            create_tooltip(
+                                dmc.Badge("Single-Node", color="blue", variant="filled", size="sm"),
+                                title="Single-Node Architecture",
+                                description="Executes JIT-compiled Numba finite difference sweeps directly in local background threads without external servers.",
+                                position="bottom",
+                            ),
                         ]),
                         dmc.Group(gap="xs", children=[
-                            dmc.Button(
-                                "Load Dataset",
-                                id="btn-open-load-modal",
-                                variant="light",
-                                color="blue",
-                                size="xs",
+                            create_tooltip(
+                                dmc.Button(
+                                    "Load Dataset",
+                                    id="btn-open-load-modal",
+                                    variant="light",
+                                    color="blue",
+                                    size="xs",
+                                ),
+                                title="Load Dataset Matrix",
+                                description="Upload a CSV matrix or select a server-local file, set the number of states, and load the dataset into the workspace.",
+                                config_name="infile / numStates",
+                                position="bottom",
                             ),
-                            dmc.Button(
-                                "Undo",
-                                id="btn-undo",
-                                variant="subtle",
-                                color="gray",
-                                size="xs",
+                            create_tooltip(
+                                dmc.Button(
+                                    "Undo",
+                                    id="btn-undo",
+                                    variant="subtle",
+                                    color="gray",
+                                    size="xs",
+                                ),
+                                title="Undo Last Action",
+                                description="Reverts the most recent manual state swap, point shuffle, state removal, or automated reordering sweep.",
+                                position="bottom",
                             ),
-                            dmc.Button(
-                                "Redo",
-                                id="btn-redo",
-                                variant="subtle",
-                                color="gray",
-                                size="xs",
+                            create_tooltip(
+                                dmc.Button(
+                                    "Redo",
+                                    id="btn-redo",
+                                    variant="subtle",
+                                    color="gray",
+                                    size="xs",
+                                ),
+                                title="Redo Next Action",
+                                description="Re-applies the previously undone action from the history stack.",
+                                position="bottom",
                             ),
-                            dmc.Button(
-                                "Save Curves CSV",
-                                id="btn-save-curves",
-                                color="green",
-                                size="xs",
+                            create_tooltip(
+                                dmc.Button(
+                                    "Save Curves CSV",
+                                    id="btn-save-curves",
+                                    color="green",
+                                    size="xs",
+                                ),
+                                title="Export Curves CSV",
+                                description="Export reordered state energy and property curves as CSV, with optional point sampling or spline interpolation.",
+                                config_name="outfile / keepInterp",
+                                position="bottom",
                             ),
-                            dmc.Button(
-                                "Save Checkpoint CSV",
-                                id="btn-save-checkpoint",
-                                color="teal",
-                                size="xs",
+                            create_tooltip(
+                                dmc.Button(
+                                    "Save Checkpoint CSV",
+                                    id="btn-save-checkpoint",
+                                    color="teal",
+                                    size="xs",
+                                ),
+                                title="Export Checkpoint CSV",
+                                description="Export the full state matrix to checkpoint.csv to allow resuming scans or external processing.",
+                                position="bottom",
                             ),
                         ]),
                     ],
@@ -170,37 +211,237 @@ def create_app(
                                         "toImageButtonOptions": {"format": "svg", "filename": "suave_plot"},
                                     },
                                 ),
-                                # Sliding window range selectors
+                                # Active Inspection & Range Presets Tray - Single Row Integrated Layout
                                 dmc.Paper(
                                     p="xs",
                                     radius="sm",
                                     withBorder=True,
-                                    style={"backgroundColor": "#18181B", "marginTop": "8px"},
+                                    style={"backgroundColor": "#18181B", "marginTop": "6px", "width": "100%"},
                                     children=[
-                                        dmc.Group([
-                                            dmc.Box(style={"flex": 1}, children=[
-                                                dmc.Text("Reaction Coordinate Window (Point Range)", size="xs", c="dimmed"),
-                                                dcc.RangeSlider(
-                                                    id="slider-point-range",
-                                                    min=0,
-                                                    max=max_pnt_idx,
-                                                    value=[0, max_pnt_idx],
-                                                    allowCross=False,
-                                                    tooltip={"always_visible": False, "placement": "top"},
+                                        dmc.SimpleGrid(
+                                            cols=2,
+                                            spacing="xl",
+                                            style={"width": "100%"},
+                                            children=[
+                                                # Column 1: Reaction Coordinate Section (Slider on Left, Presets on Right)
+                                                dmc.Box(
+                                                    style={
+                                                        "width": "100%",
+                                                        "display": "flex",
+                                                        "flexDirection": "row",
+                                                        "alignItems": "flex-end",
+                                                        "gap": "12px",
+                                                    },
+                                                    children=[
+                                                        # Slider Container
+                                                        create_tooltip(
+                                                            dmc.Box(
+                                                                className="full-width-slider-box",
+                                                                style={"flex": 1, "minWidth": "200px"},
+                                                                children=[
+                                                                    dmc.Group(
+                                                                        justify="space-between",
+                                                                        align="center",
+                                                                        style={"marginBottom": "2px", "width": "100%"},
+                                                                        children=[
+                                                                            dmc.Text(
+                                                                                "Reaction Coordinate Window",
+                                                                                size="xs",
+                                                                                fw=700,
+                                                                                c="#FAFAFA",
+                                                                            ),
+                                                                            dmc.Badge(
+                                                                                id="badge-coord-readout",
+                                                                                children="Points: 0 – 100",
+                                                                                size="xs",
+                                                                                color="blue",
+                                                                                variant="light",
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                    dcc.RangeSlider(
+                                                                        id="slider-point-range",
+                                                                        min=0,
+                                                                        max=max_pnt_idx,
+                                                                        value=[0, max_pnt_idx],
+                                                                        allowCross=False,
+                                                                        tooltip={"always_visible": False, "placement": "top"},
+                                                                        className="custom-range-slider",
+                                                                    ),
+                                                                ],
+                                                            ),
+                                                            title="Coordinate Point Range (pntBounds)",
+                                                            description=(
+                                                                "Restricts manual state manipulations (swaps, shuffles, removals) and automated sweeps "
+                                                                "to this subset of reaction coordinate indices [xmin, xmax]. Segmenting complex trajectories "
+                                                                "into smaller batches makes difficult curve crossings much easier to converge."
+                                                            ),
+                                                            config_name="pntBounds",
+                                                            default_val="Full coordinate range",
+                                                            style={"flex": 1},
+                                                            position="top",
+                                                        ),
+                                                        # Coordinate Presets (Right next to the slider)
+                                                        dmc.Group(
+                                                            gap="4px",
+                                                            wrap="nowrap",
+                                                            align="center",
+                                                            style={"flexShrink": 0, "paddingBottom": "4px"},
+                                                            children=[
+                                                                create_tooltip(
+                                                                    dmc.Button(
+                                                                        "Full",
+                                                                        id="btn-preset-full",
+                                                                        size="xs",
+                                                                        variant="light",
+                                                                        color="blue",
+                                                                        className="preset-button",
+                                                                    ),
+                                                                    title="Full Trajectory Preset",
+                                                                    description="Expands the active reaction coordinate window to span all points (0 to max).",
+                                                                    position="top",
+                                                                ),
+                                                                create_tooltip(
+                                                                    dmc.Button(
+                                                                        "Left",
+                                                                        id="btn-preset-left",
+                                                                        size="xs",
+                                                                        variant="subtle",
+                                                                        color="gray",
+                                                                        className="preset-button",
+                                                                    ),
+                                                                    title="Left Half Window Preset",
+                                                                    description="Focuses the coordinate window on the first half of the trajectory [0, 50%].",
+                                                                    position="top",
+                                                                ),
+                                                                create_tooltip(
+                                                                    dmc.Button(
+                                                                        "Right",
+                                                                        id="btn-preset-right",
+                                                                        size="xs",
+                                                                        variant="subtle",
+                                                                        color="gray",
+                                                                        className="preset-button",
+                                                                    ),
+                                                                    title="Right Half Window Preset",
+                                                                    description="Focuses the coordinate window on the second half of the trajectory [50%, 100%].",
+                                                                    position="top",
+                                                                ),
+                                                                create_tooltip(
+                                                                    dmc.Button(
+                                                                        "Avoided Crossing",
+                                                                        id="btn-preset-crossing",
+                                                                        size="xs",
+                                                                        variant="light",
+                                                                        color="grape",
+                                                                        className="preset-button",
+                                                                    ),
+                                                                    title="Auto-Focus Avoided Crossing",
+                                                                    description="Detects the narrowest energy gap between adjacent electronic states and centers the window right on the avoided crossing.",
+                                                                    position="top",
+                                                                ),
+                                                            ],
+                                                        ),
+                                                    ],
                                                 ),
-                                            ]),
-                                            dmc.Box(style={"flex": 1}, children=[
-                                                dmc.Text("State Index Filter Window", size="xs", c="dimmed"),
-                                                dcc.RangeSlider(
-                                                    id="slider-state-range",
-                                                    min=0,
-                                                    max=num_states,
-                                                    value=[0, num_states],
-                                                    allowCross=False,
-                                                    tooltip={"always_visible": False, "placement": "top"},
+
+                                                # Column 2: State Filter Section (Slider on Left, Presets on Right)
+                                                dmc.Box(
+                                                    style={
+                                                        "width": "100%",
+                                                        "display": "flex",
+                                                        "flexDirection": "row",
+                                                        "alignItems": "flex-end",
+                                                        "gap": "12px",
+                                                    },
+                                                    children=[
+                                                        # Slider Container
+                                                        create_tooltip(
+                                                            dmc.Box(
+                                                                className="full-width-slider-box",
+                                                                style={"flex": 1, "minWidth": "160px"},
+                                                                children=[
+                                                                    dmc.Group(
+                                                                        justify="space-between",
+                                                                        align="center",
+                                                                        style={"marginBottom": "2px", "width": "100%"},
+                                                                        children=[
+                                                                            dmc.Text(
+                                                                                "State Index Filter Window",
+                                                                                size="xs",
+                                                                                fw=700,
+                                                                                c="#FAFAFA",
+                                                                            ),
+                                                                            dmc.Badge(
+                                                                                id="badge-state-readout",
+                                                                                children=f"Active: S0 – S{num_states - 1} ({num_states} States)",
+                                                                                size="xs",
+                                                                                color="violet",
+                                                                                variant="light",
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                    dcc.RangeSlider(
+                                                                        id="slider-state-range",
+                                                                        min=0,
+                                                                        max=num_states,
+                                                                        value=[0, num_states],
+                                                                        allowCross=False,
+                                                                        tooltip={"always_visible": False, "placement": "top"},
+                                                                        className="custom-range-slider",
+                                                                    ),
+                                                                ],
+                                                            ),
+                                                            title="State Index Filter Range (stateBounds)",
+                                                            description=(
+                                                                "Specifies inclusive lower and upper index bounds [statemin, statemax] identifying electronic "
+                                                                "states to reorder. Allows isolating specific manifolds (e.g. low-lying valence states) while "
+                                                                "leaving higher-lying Rydberg states untouched."
+                                                            ),
+                                                            config_name="stateBounds",
+                                                            default_val="All electronic states",
+                                                            style={"flex": 1},
+                                                            position="top",
+                                                        ),
+                                                        # State Presets (Right next to the slider)
+                                                        dmc.Group(
+                                                            gap="4px",
+                                                            wrap="nowrap",
+                                                            align="center",
+                                                            style={"flexShrink": 0, "paddingBottom": "4px"},
+                                                            children=[
+                                                                create_tooltip(
+                                                                    dmc.Button(
+                                                                        "All States",
+                                                                        id="btn-preset-all-states",
+                                                                        size="xs",
+                                                                        variant="light",
+                                                                        color="blue",
+                                                                        className="preset-button",
+                                                                    ),
+                                                                    title="All States Preset",
+                                                                    description="Includes all electronic states (0 to numStates) in optimization and filtering.",
+                                                                    position="top",
+                                                                ),
+                                                                create_tooltip(
+                                                                    dmc.Button(
+                                                                        "Low States (S0–S3)",
+                                                                        id="btn-preset-low-states",
+                                                                        size="xs",
+                                                                        variant="subtle",
+                                                                        color="gray",
+                                                                        className="preset-button",
+                                                                    ),
+                                                                    title="Low-Lying States Preset",
+                                                                    description="Restricts analysis to low-lying electronic states (states 0 to 4), excluding higher Rydberg states.",
+                                                                    position="top",
+                                                                ),
+                                                            ],
+                                                        ),
+                                                    ],
                                                 ),
-                                            ]),
-                                        ]),
+                                            ],
+                                        ),
                                     ],
                                 ),
                             ],
@@ -288,6 +529,8 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
             Output("text-status-message", "children", allow_duplicate=True),
             Output("text-dataset-summary", "children"),
             Output("active-dataset-meta", "data"),
+            Output("select-prop-list", "data"),
+            Output("select-prop-list", "value"),
         ],
         Input("btn-modal-confirm", "n_clicks"),
         [
@@ -304,7 +547,7 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
         n_clicks, upload_contents, upload_filename, filepath, num_states, config_path, session_id
     ):
         if not n_clicks:
-            return (no_update,) * 13
+            return (no_update,) * 15
 
         session = session_registry.get_or_create(session_id)
         temp_input_path = filepath
@@ -325,7 +568,7 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
                 no_update, no_update, no_update, no_update, no_update, no_update,
                 no_update, no_update, no_update, no_update,
                 "Error: No valid file specified or file does not exist.",
-                no_update, no_update,
+                no_update, no_update, no_update, no_update,
             )
 
         try:
@@ -357,6 +600,9 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
             summary = f"{fname} | {ds.num_states} States | {ds.num_points} Points"
             meta = {"filename": fname, "num_states": ds.num_states, "num_points": ds.num_points}
 
+            prop_filter_data = [{"label": f"Property {i}", "value": str(i)} for i in range(ds.num_properties)]
+            prop_filter_default = [str(i) for i in range(ds.num_properties)]
+
             return (
                 False,  # close modal
                 fig,
@@ -371,6 +617,8 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
                 status_msg,
                 summary,
                 meta,
+                prop_filter_data,
+                prop_filter_default,
             )
         except Exception as e:
             return (
@@ -378,7 +626,7 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
                 no_update, no_update, no_update, no_update, no_update,
                 no_update, no_update, no_update, no_update,
                 f"Failed to load dataset: {e}",
-                no_update, no_update,
+                no_update, no_update, no_update, no_update,
             )
 
     # 4. Property or State Selection Changes
@@ -520,12 +768,17 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
             State("input-num-sweeps", "value"),
             State("input-stencil-width", "value"),
             State("input-deriv-order", "value"),
+            State("input-future-pnts", "value"),
             State("switch-alternate", "checked"),
             State("switch-sort-last", "checked"),
             State("switch-interpolate", "checked"),
             State("switch-redundant", "checked"),
+            State("switch-make-pos", "checked"),
+            State("switch-normalize", "checked"),
             State("input-max-pan", "value"),
             State("input-energy-width", "value"),
+            State("input-max-state-repeat", "value"),
+            State("select-prop-list", "value"),
             State("slider-point-range", "value"),
             State("slider-state-range", "value"),
             State("session-id", "data"),
@@ -534,8 +787,9 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
     )
     def start_sweep_callback(
         fwd_clicks, bwd_clicks, alt_clicks,
-        num_sweeps, width, order, alternate, sort_last, interpolate, redundant,
-        max_pan, e_width, point_range, state_range, session_id
+        num_sweeps, width, order, future_pnts, alternate, sort_last, interpolate, redundant,
+        make_pos, normalize, max_pan, e_width, max_state_repeat, prop_list,
+        point_range, state_range, session_id
     ):
         ctx = dash.callback_context
         if not ctx.triggered:
@@ -561,12 +815,26 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
         # Directly configure the backend SuaveStateScanner
         suave = session.suave
         suave.width = int(width) if width else 5
-        suave.orders = [int(order)] if order else [1]
+        if isinstance(order, list):
+            suave.orders = [int(o) for o in order] if order else [1]
+        elif order is not None:
+            suave.orders = [int(order)]
+        else:
+            suave.orders = [1]
+        suave.futurePnts = int(future_pnts) if future_pnts is not None else 0
         suave.sortLast = bool(sort_last)
         suave.interpolate = bool(interpolate)
         suave.redundantSwaps = bool(redundant)
+        suave.makePos = bool(make_pos)
+        suave.normalize = bool(normalize)
         suave.maxPan = int(max_pan) if max_pan else None
+        suave.eWidth = float(e_width) if e_width else None
         suave.energyWidth = float(e_width) if e_width else None
+        suave.maxStateRepeat = int(max_state_repeat) if max_state_repeat is not None else -1
+        if prop_list:
+            suave.propList = [int(p) for p in prop_list]
+        else:
+            suave.propList = [i for i in range(suave.numProps)]
         suave.pntBounds = p_bounds
         suave.stateBounds = s_bounds
         suave.halt = False
@@ -912,3 +1180,130 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
             )
             out_filename = filename.strip() if filename and filename.strip() else "checkpoint.csv"
             return no_update, dict(content=csv_string, filename=out_filename)
+
+    # 13. Live Numerical & Physical Readout Badges
+    @app.callback(
+        [
+            Output("badge-coord-readout", "children"),
+            Output("badge-state-readout", "children"),
+        ],
+        [
+            Input("slider-point-range", "value"),
+            Input("slider-state-range", "value"),
+        ],
+        State("session-id", "data"),
+    )
+    def update_readouts(point_range, state_range, session_id):
+        session = session_registry.get_or_create(session_id)
+        coord_text = "Coordinates: N/A"
+        state_text = "States: N/A"
+
+        if point_range:
+            p_min = int(point_range[0])
+            p_max = int(point_range[1])
+            pts_count = p_max - p_min + 1
+
+            if session.dataset and session.dataset.reaction_coordinates is not None:
+                rc = session.dataset.reaction_coordinates
+                max_idx = len(rc) - 1
+                p_min_clamped = min(max_idx, max(0, p_min))
+                p_max_clamped = min(max_idx, max(0, p_max))
+                r_min = float(rc[p_min_clamped])
+                r_max = float(rc[p_max_clamped])
+                coord_text = f"Points: {p_min} – {p_max} | R: {r_min:.3f} – {r_max:.3f} ({pts_count} pts)"
+            else:
+                coord_text = f"Points: {p_min} – {p_max} ({pts_count} pts)"
+
+        if state_range:
+            s_min = int(state_range[0])
+            s_max = int(state_range[1])
+            total_states = session.dataset.num_states if session.dataset else 9
+            s_count = max(0, s_max - s_min)
+            high_idx = max(s_min, s_max - 1)
+            state_text = f"Active: S{s_min} – S{high_idx} ({s_count} of {total_states} States)"
+
+        return coord_text, state_text
+
+    # 14. One-Click Slider Range Presets (Full, Left/Right Half, Zoom Avoided Crossing, State Presets)
+    @app.callback(
+        [
+            Output("slider-point-range", "value", allow_duplicate=True),
+            Output("slider-state-range", "value", allow_duplicate=True),
+            Output("text-status-message", "children", allow_duplicate=True),
+        ],
+        [
+            Input("btn-preset-full", "n_clicks"),
+            Input("btn-preset-left", "n_clicks"),
+            Input("btn-preset-right", "n_clicks"),
+            Input("btn-preset-crossing", "n_clicks"),
+            Input("btn-preset-all-states", "n_clicks"),
+            Input("btn-preset-low-states", "n_clicks"),
+        ],
+        [
+            State("slider-point-range", "max"),
+            State("slider-state-range", "max"),
+            State("session-id", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def apply_slider_presets(
+        full_clicks, left_clicks, right_clicks, crossing_clicks,
+        all_states_clicks, low_states_clicks,
+        max_pnt, max_state, session_id
+    ):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return no_update, no_update, no_update
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        session = session_registry.get_or_create(session_id)
+        total_pnts = (int(max_pnt) + 1) if max_pnt is not None else 100
+        total_states = int(max_state) if max_state is not None else 9
+
+        if trigger_id == "btn-preset-full":
+            return [0, total_pnts - 1], no_update, f"Preset applied: Full Trajectory [0, {total_pnts - 1}]."
+
+        elif trigger_id == "btn-preset-left":
+            mid = max(1, (total_pnts - 1) // 2)
+            return [0, mid], no_update, f"Preset applied: Left Half [0, {mid}]."
+
+        elif trigger_id == "btn-preset-right":
+            mid = max(0, (total_pnts - 1) // 2)
+            return [mid, total_pnts - 1], no_update, f"Preset applied: Right Half [{mid}, {total_pnts - 1}]."
+
+        elif trigger_id == "btn-preset-crossing":
+            if session.dataset and session.dataset.energies is not None:
+                E = session.dataset.energies
+                num_pts = E.shape[1]
+                min_gaps = []
+                for p in range(num_pts):
+                    sorted_e = np.sort(E[:, p])
+                    gaps = np.diff(sorted_e)
+                    pos_gaps = gaps[gaps > 1e-6]
+                    min_gaps.append(float(np.min(pos_gaps)) if len(pos_gaps) > 0 else float(np.min(gaps)))
+
+                crossing_p = int(np.argmin(min_gaps))
+                half_window = max(8, int(num_pts * 0.15))
+                p_start = max(0, crossing_p - half_window)
+                p_end = min(num_pts - 1, crossing_p + half_window)
+                rc_val = (
+                    float(session.dataset.reaction_coordinates[crossing_p])
+                    if session.dataset.reaction_coordinates is not None
+                    else crossing_p
+                )
+                return (
+                    [p_start, p_end],
+                    no_update,
+                    f"Preset: Zoomed on narrowest energy gap at point {crossing_p} (R ≈ {rc_val:.3f}, ΔE ≈ {min_gaps[crossing_p]:.4e}).",
+                )
+            else:
+                return no_update, no_update, "No dataset loaded to detect avoided crossings."
+
+        elif trigger_id == "btn-preset-all-states":
+            return no_update, [0, total_states], f"Preset applied: All States [0, {total_states}]."
+
+        elif trigger_id == "btn-preset-low-states":
+            low_cut = min(4, total_states)
+            return no_update, [0, low_cut], f"Preset applied: Low-Lying States [0, {low_cut}]."
+
+        return no_update, no_update, no_update

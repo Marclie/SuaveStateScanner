@@ -73,7 +73,8 @@ def test_property_dropdown_options():
     accordion = controls_3props.children[0]
     display_item = accordion.children[0]
     stack = display_item.children[1].children[0]
-    prop_select = stack.children[0]
+    prop_node = stack.children[0]
+    prop_select = getattr(prop_node, "children", prop_node)
 
     assert prop_select.id == "selector-property"
     labels = [opt["label"] for opt in prop_select.data]
@@ -85,7 +86,8 @@ def test_property_dropdown_options():
     # Verify for 8 properties
     controls_8props = create_sidebar_controls(num_states=9, num_props=8)
     accordion8 = controls_8props.children[0]
-    prop_select8 = accordion8.children[0].children[1].children[0].children[0]
+    prop_node8 = accordion8.children[0].children[1].children[0].children[0]
+    prop_select8 = getattr(prop_node8, "children", prop_node8)
     labels8 = [opt["label"] for opt in prop_select8.data]
     assert len(labels8) == 9
     assert labels8[0] == "Energy"
@@ -99,7 +101,8 @@ def test_available_states_dropdown_options():
     accordion = controls.children[0]
     display_item = accordion.children[0]
     stack = display_item.children[1].children[0]
-    state_select = stack.children[1]
+    state_node = stack.children[1]
+    state_select = getattr(state_node, "children", state_node)
 
     assert state_select.id == "selector-highlight-state"
     labels = [opt["label"] for opt in state_select.data]

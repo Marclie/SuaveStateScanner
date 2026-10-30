@@ -195,8 +195,8 @@ class SuaveFacade(SuaveStateScanner):
                     )
                 )
 
-        if is_alternate and not converged:
-            self.sortLast = self.sortLast
+        if is_alternate:
+            self.sortLast = sort_last
             self.sortEnergies()
 
         return SweepProgress(

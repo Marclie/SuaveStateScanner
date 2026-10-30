@@ -21,6 +21,7 @@ from suave_gui.core.dataset import StateDataset
 from suave_gui.core.parser import DataParserService
 from suave_gui.components.plot_canvas import PlotCanvasBuilder
 from suave_gui.components.file_modal import create_file_modal
+from suave_gui.components.save_modal import create_save_modal
 from suave_gui.components.sidebar_controls import create_sidebar_controls
 from suave_gui.components.status_bar import create_status_bar
 from suave_gui.state.session_store import SessionRegistry, SessionContext
@@ -88,6 +89,8 @@ def create_app(
 
                 # Data Loader Modal
                 create_file_modal(),
+                # Curve Sampling & Save Modal
+                create_save_modal(),
 
                 # Header Navigation
                 dmc.Box(
@@ -628,6 +631,10 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
                         session.sweep_telemetry["updated"] = True
                     break
 
+            if is_alt:
+                suave.sortLast = bool(sort_last)
+                suave.sortEnergies()
+
             with session.lock:
                 session.sweep_telemetry["running"] = False
                 session.sweep_telemetry["done"] = True
@@ -723,37 +730,185 @@ def _register_callbacks(app: dash.Dash, session_registry: SessionRegistry) -> No
         )
         return False, "Sweeping...", "orange", fig, status_txt, del_str
 
-    # 9. CSV Downloads
+    # 9. Curve Sampling & CSV Exports Modal and Downloads
     @app.callback(
-        Output("download-curves-csv", "data"),
-        Input("btn-save-curves", "n_clicks"),
         [
+            Output("save-sampling-modal", "opened"),
+            Output("save-modal-target-type", "value", allow_duplicate=True),
+            Output("save-modal-num-points", "value"),
+            Output("save-modal-info-text", "children"),
+        ],
+        [
+            Input("btn-save-curves", "n_clicks"),
+            Input("btn-save-checkpoint", "n_clicks"),
+            Input("btn-save-modal-cancel", "n_clicks"),
+            Input("btn-save-modal-confirm", "n_clicks"),
+        ],
+        [
+            State("save-sampling-modal", "opened"),
+            State("session-id", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def manage_save_modal(btn_curves, btn_ckpt, btn_cancel, btn_confirm, is_opened, session_id):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return no_update, no_update, no_update, no_update
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        session = session_registry.get_or_create(session_id)
+        num_pts = session.dataset.num_points if (session and session.dataset) else 100
+        num_states = session.dataset.num_states if (session and session.dataset) else 9
+
+        if trigger_id == "btn-save-curves":
+            info_msg = (
+                f"Current dataset contains {num_pts} points across {num_states} states. "
+                "Specify how many points to sample in the exported curves CSV."
+            )
+            return True, "curves", num_pts, info_msg
+        elif trigger_id == "btn-save-checkpoint":
+            info_msg = (
+                f"Current dataset contains {num_pts} points across {num_states} states. "
+                "Specify how many points to sample in the exported checkpoint CSV."
+            )
+            return True, "checkpoint", num_pts, info_msg
+        elif trigger_id in ("btn-save-modal-cancel", "btn-save-modal-confirm"):
+            return False, no_update, no_update, no_update
+
+        return is_opened, no_update, no_update, no_update
+
+    @app.callback(
+        [
+            Output("save-modal-title", "children"),
+            Output("save-modal-filename", "value"),
+        ],
+        Input("save-modal-target-type", "value"),
+        prevent_initial_call=True,
+    )
+    def toggle_save_target_type(target_type):
+        if target_type == "checkpoint":
+            return "Save Checkpoint CSV", "checkpoint.csv"
+        return "Save Curves CSV", "curves.csv"
+
+    @app.callback(
+        Output("save-modal-interp-kind", "disabled"),
+        Input("save-modal-interpolate-switch", "checked"),
+    )
+    def toggle_interp_kind_disabled(is_interpolate):
+        return not bool(is_interpolate)
+
+    @app.callback(
+        Output("save-modal-feedback", "children"),
+        [
+            Input("save-modal-num-points", "value"),
+            Input("save-modal-interpolate-switch", "checked"),
+            Input("save-modal-interp-kind", "value"),
+            Input("save-modal-target-type", "value"),
+        ],
+        State("session-id", "data"),
+    )
+    def update_save_modal_feedback(num_points, interpolate, interp_kind, target_type, session_id):
+        session = session_registry.get_or_create(session_id)
+        cur_pts = session.dataset.num_points if (session and session.dataset) else 500
+        if not num_points or int(num_points) <= 0:
+            return dmc.Alert("Please enter a valid positive number of points.", color="red")
+
+        n_pts = int(num_points)
+        target_name = "Curves CSV" if target_type == "curves" else "Checkpoint CSV"
+        interp_name = "Cubic Spline" if interp_kind == "cubic" else "Linear"
+
+        if interpolate:
+            if n_pts == cur_pts:
+                return dmc.Alert(
+                    f"Interpolation enabled: Will fit {interp_name} curves and sample {n_pts} evenly spaced points across reaction coordinates for {target_name}.",
+                    color="indigo",
+                )
+            elif n_pts < cur_pts:
+                return dmc.Alert(
+                    f"Downsampling with interpolation: Will fit {interp_name} curves and sample {n_pts} evenly spaced points across the curve (original: {cur_pts} points).",
+                    color="indigo",
+                )
+            else:
+                return dmc.Alert(
+                    f"Upsampling with interpolation: Will fit {interp_name} curves and sample {n_pts} evenly spaced points across the curve (original: {cur_pts} points).",
+                    color="blue",
+                )
+        else:
+            if n_pts == cur_pts:
+                return dmc.Alert(
+                    f"Subdivision: Keeping all {cur_pts} original points without interpolation for {target_name}.",
+                    color="teal",
+                )
+            elif n_pts < cur_pts:
+                return dmc.Alert(
+                    f"Subdividing points: Will select {n_pts} equally spaced points from existing {cur_pts} points without interpolation.",
+                    color="teal",
+                )
+            else:
+                return dmc.Alert(
+                    f"Notice: Cannot subdivide to {n_pts} points because it exceeds the current {cur_pts} points. "
+                    f"Interpolation ({interp_name}) will be automatically applied to sample {n_pts} evenly spaced points.",
+                    color="yellow",
+                )
+
+    @app.callback(
+        [
+            Output("download-curves-csv", "data"),
+            Output("download-checkpoint-csv", "data"),
+        ],
+        Input("btn-save-modal-confirm", "n_clicks"),
+        [
+            State("save-modal-target-type", "value"),
+            State("save-modal-num-points", "value"),
+            State("save-modal-interpolate-switch", "checked"),
+            State("save-modal-interp-kind", "value"),
+            State("save-modal-filename", "value"),
             State("selector-property", "value"),
             State("session-id", "data"),
         ],
         prevent_initial_call=True,
     )
-    def download_curves_csv(n_clicks, prop_val, session_id):
+    def handle_save_export(
+        n_clicks,
+        target_type,
+        num_points,
+        interpolate,
+        interp_kind,
+        filename,
+        prop_val,
+        session_id,
+    ):
         if not n_clicks:
-            return no_update
-        session = session_registry.get_or_create(session_id)
-        if not session.dataset:
-            return no_update
-        prop_idx = int(prop_val) if prop_val else 0
-        csv_string = DataParserService.export_curves_csv(session.dataset, property_idx=prop_idx)
-        return dict(content=csv_string, filename="curves_output.csv")
+            return no_update, no_update
 
-    @app.callback(
-        Output("download-checkpoint-csv", "data"),
-        Input("btn-save-checkpoint", "n_clicks"),
-        State("session-id", "data"),
-        prevent_initial_call=True,
-    )
-    def download_checkpoint_csv(n_clicks, session_id):
-        if not n_clicks:
-            return no_update
         session = session_registry.get_or_create(session_id)
         if not session.dataset:
-            return no_update
-        csv_string = DataParserService.export_checkpoint_csv(session.dataset)
-        return dict(content=csv_string, filename="checkpoint.csv")
+            return no_update, no_update
+
+        cur_pts = session.dataset.num_points
+        target_pts = int(num_points) if num_points else cur_pts
+        interp = bool(interpolate)
+        if target_pts > cur_pts:
+            interp = True
+        kind = str(interp_kind) if interp_kind else "cubic"
+
+        if target_type == "curves":
+            prop_idx = int(prop_val) if prop_val else 0
+            csv_string = DataParserService.export_curves_csv(
+                session.dataset,
+                property_idx=prop_idx,
+                target_points=target_pts,
+                interpolate_curves=interp,
+                interp_kind=kind,
+            )
+            out_filename = filename.strip() if filename and filename.strip() else "curves.csv"
+            return dict(content=csv_string, filename=out_filename), no_update
+        else:
+            csv_string = DataParserService.export_checkpoint_csv(
+                session.dataset,
+                target_points=target_pts,
+                interpolate_curves=interp,
+                interp_kind=kind,
+            )
+            out_filename = filename.strip() if filename and filename.strip() else "checkpoint.csv"
+            return no_update, dict(content=csv_string, filename=out_filename)

@@ -377,6 +377,9 @@ class SuaveStateScanner:
         self.E = copy.deepcopy(lastEvals)
         self.P = copy.deepcopy(lastPvals)
         self.sortEnergies()  # sort energies and properties
+        # ensure lastEvals and lastPvals match the sorted order corresponding to stateMap
+        lastEvals = copy.deepcopy(self.E)
+        lastPvals = copy.deepcopy(self.P)
         # create map of current state to last state for each point
         self.stateMap = np.zeros((self.numStates, self.numPoints), dtype=np.int32)
         for pnt in range(self.numPoints):
@@ -392,14 +395,15 @@ class SuaveStateScanner:
         :return delMax: the maximum change in the energies and properties of the states
         :return E, P: the energies and properties of the states in their new order
         """
-        # reset states to original order with missing values
-        self.E = copy.deepcopy(lastEvals)
-        self.P = copy.deepcopy(lastPvals)
-        # use self.stateMap to reorder states
-        for pnt in range(self.numPoints):
-            statesToSwap = self.stateMap[:, pnt].tolist()
-            self.E[:, pnt] = self.E[statesToSwap, pnt]
-            self.P[:, pnt] = self.P[statesToSwap, pnt]
+        # reset states to original order with missing values (if any were temporarily interpolated)
+        if self.hasMissing and not self.keepInterp:
+            self.E = copy.deepcopy(lastEvals)
+            self.P = copy.deepcopy(lastPvals)
+            # use self.stateMap to reorder states
+            for pnt in range(self.numPoints):
+                statesToSwap = self.stateMap[:, pnt].tolist()
+                self.E[:, pnt] = self.E[statesToSwap, pnt]
+                self.P[:, pnt] = self.P[statesToSwap, pnt]
         # check if states have converged
         delEval = self.E - lastEvals
         delPval = self.P - lastPvals
@@ -745,44 +749,85 @@ class SuaveStateScanner:
         self.P = Ncurves.reshape((numStates, numPoints, numColumns))
 
 
-    def saveOrder(self, isFinalResults = False):
+    def saveOrder(self, isFinalResults = False, target_points = None, interpolate = False, interp_kind = "cubic"):
         """
         This function will save the state information of a reorder scan for a future run of this script
         :param isFinalResults: A boolean that determines if the final results are being saved
+        :param target_points: Optional int to specify number of points to sample
+        :param interpolate: Whether to interpolate curves (True) or subdivide points (False)
+        :param interp_kind: Interpolation type ('cubic', 'linear')
         :return The energy and properties for each state at each point written to a file "checkpoint.csv"
         """
 
-        tempInput = zeros((self.P.shape[0] * self.P.shape[1], self.P.shape[2] + 2))
-        combineVals(self.E, self.P, self.allPnts, tempInput)
+        import scipy.interpolate as interp_lib
+        if target_points is not None:
+            if not interpolate and target_points <= self.allPnts.shape[0]:
+                idx = np.round(np.linspace(0, self.allPnts.shape[0] - 1, target_points)).astype(int)
+                savePnts = self.allPnts[idx]
+                saveE = self.E[:, idx]
+                saveP = self.P[:, idx, :]
+            else:
+                savePnts = np.linspace(self.allPnts[0], self.allPnts[-1], target_points)
+                saveE = np.zeros((self.numStates, target_points), dtype=np.float64)
+                saveP = np.zeros((self.numStates, target_points, self.numProps), dtype=np.float64)
+                for state in range(self.numStates):
+                    valid_e = np.isfinite(self.E[state, :]) & np.isfinite(self.allPnts)
+                    if np.sum(valid_e) >= 2:
+                        k = interp_kind if np.sum(valid_e) >= 4 and interp_kind == "cubic" else "linear"
+                        saveE[state, :] = interp_lib.interp1d(
+                            self.allPnts[valid_e], self.E[state, valid_e], kind=k, fill_value="extrapolate"
+                        )(savePnts)
+                    elif np.sum(valid_e) == 1:
+                        saveE[state, :] = self.E[state, valid_e][0]
+                    else:
+                        saveE[state, :] = np.nan
+                    for prop in range(self.numProps):
+                        valid_p = np.isfinite(self.P[state, :, prop]) & np.isfinite(self.allPnts)
+                        if np.sum(valid_p) >= 2:
+                            k = interp_kind if np.sum(valid_p) >= 4 and interp_kind == "cubic" else "linear"
+                            saveP[state, :, prop] = interp_lib.interp1d(
+                                self.allPnts[valid_p], self.P[state, valid_p, prop], kind=k, fill_value="extrapolate"
+                            )(savePnts)
+                        elif np.sum(valid_p) == 1:
+                            saveP[state, :, prop] = self.P[state, valid_p, prop][0]
+                        else:
+                            saveP[state, :, prop] = np.nan
+        else:
+            savePnts = self.allPnts
+            saveE = self.E
+            saveP = self.P
+
+        tempInput = zeros((saveP.shape[0] * saveP.shape[1], saveP.shape[2] + 2))
+        combineVals(saveE, saveP, savePnts, tempInput)
 
         savetxt("checkpoint.csv", tempInput, fmt='%20.12f')
 
         newCurvesList = []
-        for pnt in range(self.allPnts.shape[0]):
+        for pnt in range(savePnts.shape[0]):
             if self.printVar == 0:
-                newCurvesList.append(self.E[:, pnt])
+                newCurvesList.append(saveE[:, pnt])
             elif self.printVar < 0:
-                newCurvesList.append(self.P[:, pnt, self.printVar])
+                newCurvesList.append(saveP[:, pnt, self.printVar])
             else:
-                newCurvesList.append(self.P[:, pnt, self.printVar - 1])
+                newCurvesList.append(saveP[:, pnt, self.printVar - 1])
 
         newCurves = stack(newCurvesList, axis=1)
-        newCurves = insert(newCurves, 0, self.allPnts, axis=0)
+        newCurves = insert(newCurves, 0, savePnts, axis=0)
         savetxt('temp_out.csv', newCurves, fmt='%20.12f')
 
 
         if isFinalResults: # save the final results
             # Create the output file
             newCurvesList = []
-            for pnt in range(self.allPnts.shape[0]):
+            for pnt in range(savePnts.shape[0]):
                 if self.printVar == 0:
-                    newCurvesList.append(self.E[:, pnt])
+                    newCurvesList.append(saveE[:, pnt])
                 elif self.printVar < 0:
-                    newCurvesList.append(self.P[:, pnt, self.printVar])
+                    newCurvesList.append(saveP[:, pnt, self.printVar])
                 else:
-                    newCurvesList.append(self.P[:, pnt, self.printVar - 1])
+                    newCurvesList.append(saveP[:, pnt, self.printVar - 1])
             newCurves = stack(newCurvesList, axis=1)
-            newCurves = insert(newCurves, 0, self.allPnts, axis=0)
+            newCurves = insert(newCurves, 0, savePnts, axis=0)
             savetxt(self.outfile, newCurves, fmt='%20.12f')
 
     def applyConfig(self):

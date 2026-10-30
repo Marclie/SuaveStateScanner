@@ -79,3 +79,48 @@ def test_sort_energies(sample_dataset):
     # At point 0, state 0 should now have lowest energy (-108.0)
     assert sample_dataset.energies[0, 0] == -108.0
     assert sample_dataset.energies[2, 0] == 50.0
+
+
+def test_resample_subdivide(sample_dataset):
+    # Subdivide 5 points into 3 equally spaced points: indices 0, 2, 4
+    resampled = sample_dataset.resample(target_points=3, interpolate_curves=False)
+    assert resampled.num_points == 3
+    assert resampled.num_states == 3
+    assert resampled.num_properties == 2
+    assert np.allclose(resampled.reaction_coordinates, np.array([0.9, 1.1, 1.3]))
+    assert np.allclose(resampled.energies[:, 0], sample_dataset.energies[:, 0])
+    assert np.allclose(resampled.energies[:, 1], sample_dataset.energies[:, 2])
+    assert np.allclose(resampled.energies[:, 2], sample_dataset.energies[:, 4])
+    assert resampled.metadata["method"] == "subdivide"
+
+
+def test_resample_interpolate_downsample(sample_dataset):
+    # Downsample from 5 to 3 points via spline interpolation
+    resampled = sample_dataset.resample(target_points=3, interpolate_curves=True, kind="linear")
+    assert resampled.num_points == 3
+    assert np.isclose(resampled.reaction_coordinates[0], 0.9)
+    assert np.isclose(resampled.reaction_coordinates[-1], 1.3)
+    assert resampled.metadata["method"] == "interpolate"
+
+
+def test_resample_interpolate_upsample(sample_dataset):
+    # Upsample from 5 points to 10 points
+    resampled = sample_dataset.resample(target_points=10, interpolate_curves=True)
+    assert resampled.num_points == 10
+    assert len(resampled.reaction_coordinates) == 10
+    assert np.isclose(resampled.reaction_coordinates[0], 0.9)
+    assert np.isclose(resampled.reaction_coordinates[-1], 1.3)
+
+
+def test_resample_invalid_points(sample_dataset):
+    with pytest.raises(ValueError, match="positive integer"):
+        sample_dataset.resample(target_points=0)
+    with pytest.raises(ValueError, match="positive integer"):
+        sample_dataset.resample(target_points=-5)
+
+
+def test_resample_with_missing(sample_dataset):
+    sample_dataset.energies[0, 2] = np.nan
+    resampled = sample_dataset.resample(target_points=4, interpolate_curves=True)
+    assert resampled.num_points == 4
+    assert np.all(np.isfinite(resampled.energies))

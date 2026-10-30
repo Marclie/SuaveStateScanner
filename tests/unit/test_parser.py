@@ -86,3 +86,35 @@ def test_export_and_reimport():
     assert np.allclose(dataset.energies, reimported.energies)
     assert np.allclose(dataset.properties, reimported.properties)
     assert np.allclose(dataset.reaction_coordinates, reimported.reaction_coordinates)
+
+
+def test_export_curves_with_resampling():
+    input_path = "input.csv"
+    if os.path.exists(input_path):
+        dataset = DataParserService.parse_csv_stream(input_path, num_states=9)
+
+        # 100 points subdivide
+        curves_100 = DataParserService.export_curves_csv(dataset, target_points=100, interpolate_curves=False)
+        mat_100 = np.genfromtxt(io.StringIO(curves_100))
+        assert mat_100.shape == (10, 100)
+
+        # 1000 points interpolate
+        curves_1000 = DataParserService.export_curves_csv(dataset, target_points=1000, interpolate_curves=True)
+        mat_1000 = np.genfromtxt(io.StringIO(curves_1000))
+        assert mat_1000.shape == (10, 1000)
+
+
+def test_export_checkpoint_with_resampling():
+    input_path = "input.csv"
+    if os.path.exists(input_path):
+        dataset = DataParserService.parse_csv_stream(input_path, num_states=9)
+
+        # 100 points subdivide
+        ckpt_100 = DataParserService.export_checkpoint_csv(dataset, target_points=100, interpolate_curves=False)
+        reimported_100 = DataParserService.parse_csv_stream(io.StringIO(ckpt_100), num_states=9)
+        assert reimported_100.num_points == 100
+
+        # 1000 points interpolate
+        ckpt_1000 = DataParserService.export_checkpoint_csv(dataset, target_points=1000, interpolate_curves=True)
+        reimported_1000 = DataParserService.parse_csv_stream(io.StringIO(ckpt_1000), num_states=9)
+        assert reimported_1000.num_points == 1000

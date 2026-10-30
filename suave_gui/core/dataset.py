@@ -355,3 +355,112 @@ class StateDataset:
             self._e[:] = e
         if p is not self._p:
             self._p[:] = p
+
+    def resample(
+        self,
+        target_points: int,
+        interpolate_curves: bool = False,
+        kind: str = "cubic",
+    ) -> StateDataset:
+        """
+        Resample dataset curves to target_points.
+        If interpolate_curves is False and target_points <= num_points:
+            Subdivides the points to keep only target_points evenly spaced original points.
+        If interpolate_curves is True (or target_points > num_points):
+            Interpolates the curves (spline/linear) and samples target_points evenly spaced points.
+        Returns a new StateDataset instance without mutating this dataset.
+        """
+        if target_points <= 0:
+            raise ValueError(f"target_points must be a positive integer, got {target_points}")
+
+        if target_points == self.num_points and not interpolate_curves:
+            return self.clone()
+
+        # If interpolation is not desired and target_points <= num_points: subdivide
+        if not interpolate_curves and target_points <= self.num_points:
+            indices = np.round(np.linspace(0, self.num_points - 1, target_points)).astype(int)
+            new_rc = self.reaction_coordinates[indices].copy()
+            new_e = self.energies[:, indices].copy()
+            new_p = self.properties[:, indices, :].copy()
+            new_meta = dict(self.metadata)
+            new_meta.update({
+                "resampled": True,
+                "original_points": self.num_points,
+                "target_points": target_points,
+                "method": "subdivide",
+            })
+            return StateDataset(
+                reaction_coordinates=new_rc,
+                energies=new_e,
+                properties=new_p,
+                filename=self.filename,
+                metadata=new_meta,
+            )
+
+        # Otherwise, interpolate the curves and sample target_points evenly
+        rc = self.reaction_coordinates
+        new_rc = np.linspace(rc[0], rc[-1], target_points)
+        new_e = np.zeros((self.num_states, target_points), dtype=np.float64)
+        new_p = np.zeros((self.num_states, target_points, self.num_properties), dtype=np.float64)
+
+        for state in range(self.num_states):
+            # 1. Energies
+            e_curve = self.energies[state, :]
+            valid_e = np.isfinite(e_curve) & np.isfinite(rc)
+            if np.sum(valid_e) >= 2:
+                valid_rc = rc[valid_e]
+                valid_vals = e_curve[valid_e]
+                if not (np.all(np.diff(valid_rc) > 0) or np.all(np.diff(valid_rc) < 0)):
+                    sort_idx = np.argsort(valid_rc)
+                    valid_rc = valid_rc[sort_idx]
+                    valid_vals = valid_vals[sort_idx]
+                    valid_rc, unique_idx = np.unique(valid_rc, return_index=True)
+                    valid_vals = valid_vals[unique_idx]
+                interp_kind = kind if len(valid_rc) >= 4 and kind == "cubic" else "linear"
+                f_e = interpolate.interp1d(
+                    valid_rc, valid_vals, kind=interp_kind, fill_value="extrapolate"
+                )
+                new_e[state, :] = f_e(new_rc)
+            elif np.sum(valid_e) == 1:
+                new_e[state, :] = e_curve[valid_e][0]
+            else:
+                new_e[state, :] = np.nan
+
+            # 2. Properties
+            for prop in range(self.num_properties):
+                p_curve = self.properties[state, :, prop]
+                valid_p = np.isfinite(p_curve) & np.isfinite(rc)
+                if np.sum(valid_p) >= 2:
+                    valid_rc = rc[valid_p]
+                    valid_vals = p_curve[valid_p]
+                    if not (np.all(np.diff(valid_rc) > 0) or np.all(np.diff(valid_rc) < 0)):
+                        sort_idx = np.argsort(valid_rc)
+                        valid_rc = valid_rc[sort_idx]
+                        valid_vals = valid_vals[sort_idx]
+                        valid_rc, unique_idx = np.unique(valid_rc, return_index=True)
+                        valid_vals = valid_vals[unique_idx]
+                    interp_kind = kind if len(valid_rc) >= 4 and kind == "cubic" else "linear"
+                    f_p = interpolate.interp1d(
+                        valid_rc, valid_vals, kind=interp_kind, fill_value="extrapolate"
+                    )
+                    new_p[state, :, prop] = f_p(new_rc)
+                elif np.sum(valid_p) == 1:
+                    new_p[state, :, prop] = p_curve[valid_p][0]
+                else:
+                    new_p[state, :, prop] = np.nan
+
+        new_meta = dict(self.metadata)
+        new_meta.update({
+            "resampled": True,
+            "original_points": self.num_points,
+            "target_points": target_points,
+            "method": "interpolate",
+            "interp_kind": kind,
+        })
+        return StateDataset(
+            reaction_coordinates=new_rc,
+            energies=new_e,
+            properties=new_p,
+            filename=self.filename,
+            metadata=new_meta,
+        )

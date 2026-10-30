@@ -126,12 +126,26 @@ class DataParserService:
         dataset: StateDataset,
         property_idx: int = 0,
         filepath: Optional[str] = None,
+        target_points: Optional[int] = None,
+        interpolate_curves: bool = False,
+        interp_kind: str = "cubic",
     ) -> Optional[str]:
         """
         Export final curve ordering.
         Row 0: Reaction Coordinates
         Rows 1..num_states: Values for each state along reaction coordinates.
+
+        Optionally resamples curve to target_points:
+        - If interpolate_curves is False and target_points <= num_points: subdivides existing points evenly.
+        - If interpolate_curves is True or target_points > num_points: interpolates and samples evenly.
         """
+        if target_points is not None:
+            dataset = dataset.resample(
+                target_points=target_points,
+                interpolate_curves=interpolate_curves,
+                kind=interp_kind,
+            )
+
         num_points = dataset.num_points
         curves_list = []
 
@@ -156,12 +170,28 @@ class DataParserService:
 
     @classmethod
     def export_checkpoint_csv(
-        cls, dataset: StateDataset, filepath: Optional[str] = None
+        cls,
+        dataset: StateDataset,
+        filepath: Optional[str] = None,
+        target_points: Optional[int] = None,
+        interpolate_curves: bool = False,
+        interp_kind: str = "cubic",
     ) -> Optional[str]:
         """
         Export full dataset in native input format:
         pnt*num_states + state: [rc, energy, prop1, prop2, ...]
+
+        Optionally resamples curve to target_points:
+        - If interpolate_curves is False and target_points <= num_points: subdivides existing points evenly.
+        - If interpolate_curves is True or target_points > num_points: interpolates and samples evenly.
         """
+        if target_points is not None:
+            dataset = dataset.resample(
+                target_points=target_points,
+                interpolate_curves=interpolate_curves,
+                kind=interp_kind,
+            )
+
         num_points = dataset.num_points
         num_states = dataset.num_states
         num_props = dataset.num_properties

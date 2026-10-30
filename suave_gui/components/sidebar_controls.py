@@ -196,6 +196,7 @@ def create_sidebar_controls(num_states: int = 9, num_props: int = 8) -> dmc.Box:
                                     dmc.Switch(
                                         id="switch-redundant",
                                         label="Redundant Swaps",
+                                        description="Allow later states to re-swap with earlier states",
                                         checked=True,
                                         size="xs",
                                     ),

@@ -1,5 +1,7 @@
-dash>=2.14.0
-dash-mantine-components>=2.0.0
+# Keep Dash and Dash Mantine Components on a compatible React-18 pair.
+# Newer DMC releases target React 19 and will fail to render the app, resulting in a white screen.
+dash==3.0.4
+dash-mantine-components==2.0.0
 plotly>=5.18.0
 numpy>=1.24.0
 scipy>=1.10.0

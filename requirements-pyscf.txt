@@ -1,0 +1,3 @@
+# Optional ab initio workflow dependencies (PySCF 2.9 is the validated version).
+-r requirements.txt
+pyscf>=2.9,<3

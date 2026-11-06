@@ -4,7 +4,7 @@ Suave State Scanner - Modern GUI Entrypoint (Single-Node Dash).
 
 Usage:
     python suave_gui_runner.py
-    python suave_gui_runner.py --infile input.csv --num-states 9 --config suave.json
+    python suave_gui_runner.py --infile input.csv --num-states 7 --config suave.json
 """
 
 import argparse
@@ -28,7 +28,7 @@ def main():
     parser.add_argument(
         "-n", "--num-states",
         type=int,
-        default=9,
+        default=7,
         help="Number of electronic states per reaction coordinate point",
     )
     parser.add_argument(

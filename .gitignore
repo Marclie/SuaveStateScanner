@@ -1,3 +1,5 @@
+# Reproducible workflow outputs; do not overwrite the repository sample CSVs.
+/artifacts/
 __pycache__/
 *.pyc
 checkpoint.csv

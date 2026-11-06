@@ -10,6 +10,7 @@ Table of Contents
 * [Arguments](#arguments)
 * [Input File Format](#input-file-format)
 * [Configuration File Format](#configuration-file-format)
+* [PySCF H2 End-to-End Workflow](#pyscf-h2-end-to-end-workflow)
 * [Troubleshooting](#troubleshooting)
 * [How to cite](#how-to-cite)
 
@@ -75,7 +76,7 @@ To start the interactive GUI:
 python suave_gui_runner.py
 
 # Or launch directly with custom dataset or state count
-python suave_gui_runner.py --infile input.csv --num-states 9 --config suave.json
+python suave_gui_runner.py --infile input.csv --num-states 7 --config suave.json
 
 ```
 Open your browser at `http://127.0.0.1:8050/`.
@@ -259,6 +260,138 @@ All configurations in the configuration file are optional and are defined as fol
 * `redundantSwaps` - Whether to allow redundant swaps. If set to False, a state will only be considered for swapping with higher lying states. 
   This improves performance since fewer states are incorporated into the derivatives. Lower lying states should already be in the correct order after a few iterations. 
   However, depending on the data, this may not be the case and the script may not converge. (default: True)
+
+PySCF H2 End-to-End Workflow
+---------------------------
+
+[examples/pyscf_h2.py](examples/pyscf_h2.py) starts with electronic-structure
+calculations rather than an existing CSV: neutral H2 in **6-31G**, an
+unrestricted Kohn–Sham (**UKS/B3LYP**) reference, and full spin-conserving
+**TDDFT** (including both X and Y, **not TDA**). It produces **seven states per
+geometry: the actual ground state plus all six positive excited-state
+roots**, and passes the resulting CSV through the actual SuaveStateScanner CLI.
+The mesh uses a fixed 0.05 Angstrom spacing. PySCF is optional; version 2.9 has been validated.
+B3LYP uses PySCF's installed LibXC definition; the resolved functional components,
+LibXC/PySCF versions and numerical grid level (3) are recorded for reproducibility.
+
+**Why 6-31G rather than STO-3G?** H2/STO-3G has two AOs and only one
+occupied-to-virtual channel per spin, so standard spin-conserving TDDFT supports
+at most two excited roots. H2/6-31G has four AOs and three virtual orbitals per
+spin, giving six roots. It is the selected small-basis alternative for retaining
+one ground plus six excited states; extra roots are never invented or padded.
+
+Run from the repository root:
+
+```bash
+python -m pip install -r requirements-pyscf.txt
+python -m examples.pyscf_h2 --shuffle
+```
+
+Omit `--shuffle` to use native PySCF root order. With `--shuffle`, complete
+**excited-state** records are deterministically permuted after the first two
+anchor geometries (`--seed 7` by default); no energy or property is detached from
+its state. The known ground-state row is never shuffled or swapped by the scanner.
+Use `--output-dir PATH` to change the default output directory, `artifacts/pyscf_h2`.
+Scanner checkpoints and logs stay in that directory, not beside the repository's
+sample input/output files.
+
+### Reaction-coordinate mesh
+
+There are **exactly 43 bond lengths from 0.40 to 2.50 Angstrom, inclusive**,
+with a **uniform 0.05 Angstrom step**. No region-dependent sampling rules or
+duplicate boundaries are needed: $R_k=0.40+0.05k$ Angstrom for $k=0,\ldots,42$.
+
+### Saved energies and properties
+
+The raw and checkpoint CSVs use the [native input layout](#input-file-format):
+**301 whitespace-delimited data rows and 9 columns**, seven adjacent rows per geometry,
+with a commented column header on the raw input. All quantities except bond length are in atomic
+units or dimensionless, as appropriate:
+
+| Column (1-based) | Quantity |
+| --- | --- |
+| 1 | H–H distance in Angstrom |
+| 2 | Total state energy: UKS energy including nuclear repulsion + TDDFT excitation energy, in Hartree |
+| 3 | TDDFT excitation energy in Hartree (zero for the ground state) |
+| 4 | Length-gauge oscillator strength |
+| 5 | Normalized alpha/beta transition-density overlap (spin-transition character, **not** excited-state $\langle S^2\rangle$) |
+| 6–9 | Phase-invariant attachment weights on the four symmetric-orthonormal AO functions |
+
+The scanner continuity features are the excitation energy, oscillator strength,
+spin-transition character and AO attachment weights. These are the only saved
+state properties retained in the PySCF workflow for labeling. The ground state
+row has zero excitation energy, zero oscillator strength and zero transition
+character by convention.
+
+Continuity features use the spin transition densities
+$D_\sigma=S^{1/2}C_{\mathrm{occ},\sigma}(X_\sigma+Y_\sigma)C_{\mathrm{virt},\sigma}^T S^{1/2}$.
+The spin character is $2\langle D_\alpha,D_\beta\rangle/(\|D_\alpha\|^2+\|D_\beta\|^2)$;
+the attachment weights are the diagonal of $\sum_\sigma D_\sigma^T D_\sigma$,
+normalized to sum to one. These descriptors are invariant to MO phases and to
+consistent virtual-orbital permutations/rotations.
+
+The workflow saves:
+
+* `raw.csv`: ground-state row followed by native energy-ordered PySCF roots, using only the saved smooth continuity fields.
+* `input.csv`: the actual scanner input, optionally shuffled, with the same saved field layout.
+* `checkpoint.csv`: sorted states and the same saved smooth fields in native input layout.
+* `energies.csv`: sorted total state curves, shape **(8, 43)**: coordinate, ground, then six excited-state rows.
+* `suave.json`: exact scanner configuration; `propList=[0,1,2,3,4,5,6]` selects the saved excitation energy, oscillator strength, spin-transition character and AO attachment weights, with total energy always retained as the target variable. The ground state is excluded from swapping.
+* `metadata.json`: column definitions, mesh, basis/functional and resolved LibXC
+  components, versions, grid, convergence tolerances, conventions and optional shuffle seed.
+* `orbitals.npz`: native MO coefficients, occupations, orbital energies, AO overlaps/labels
+  and bond lengths; necessary to interpret full X/Y amplitudes when needed.
+* `scanner.log` and `temp_out.csv`: convergence log and interim energy output.
+
+The full X/Y amplitudes and MO labels are still computed internally for interpretation,
+but they are no longer exported as part of the CSV workflow used by the scanner.
+Both native input and sorted checkpoints can also be loaded into the GUI with
+`num_states=7`. The energy-only final output is not a restart/input-format CSV.
+
+### Physical limitations and test expectations
+
+Every geometry starts with a localized alpha-on-H1/beta-on-H2 density, allowing
+UKS to break spin symmetry beyond the Coulson–Fischer point rather than remaining
+on an unstable restricted-like branch. C2v symmetry does not forbid this spin
+symmetry breaking along the bond axis; this s-only basis has sigma-type orbitals.
+The TDDFT solver starts with a complete single-excitation guess space, including
+all spin-conserving symmetries. Internal UKS stability, SCF convergence,
+and six positive, converged TDDFT roots are checked. Missing/imaginary roots cause
+an explicit failure: the workflow never invents roots or silently substitutes TDA.
+
+The unrestricted response includes both singlet-like and triplet-like spin-conserving
+roots; it is **not a singlet-only spectrum**. Beyond spin symmetry breaking, the UKS
+reference is spin contaminated and roots are not pure spin eigenstates. Spin-flip
+and explicit double excitations are not included. Adiabatic B3LYP TDDFT is not an
+exact correlated dissociation benchmark, and 2.50 Angstrom is not infinite separation.
+6-31G has no polarization functions on hydrogen. The real Coulson–Fischer soft
+mode is nonmonotonic and should not be smoothed away.
+
+All six spin-conserving single-excitation roots are included, so no higher roots
+are omitted at an energy-window cutoff in this basis. Nevertheless,
+degenerate-root rotations can make individual labels nonunique, and continuity
+assignment alone is not proof of exact state identity at avoided crossings.
+
+[tests/end_to_end/test_pyscf_h2.py](tests/end_to_end/test_pyscf_h2.py) runs both
+native-root and deliberately shuffled workflows, sharing the costly electronic-structure
+calculations. It checks excited-root normalization, ground-state conventions,
+the oscillator-strength/dipole relation, reconstruction of transition properties
+from saved full amplitudes/MOs, CSV round-trips, whole-record conservation and
+ground-state preservation. At **all 43 points**, the scanner output is compared
+with an independent nearest-neighbor energy/property assignment; continuity improves
+for both native and shuffled input. This is a numerical regression oracle, not
+proof of exact electronic-state identities at avoided crossings or degeneracies.
+
+```bash
+# Only the electronic-structure workflow tests:
+python -m pytest -m pyscf
+
+# Fast tests without electronic-structure calculations:
+python -m pytest -m "not pyscf"
+```
+
+The PySCF-marked tests run in the normal suite when PySCF is installed, otherwise
+they skip. Fast mesh, CSV and phase-convention tests never require PySCF.
 
 Troubleshooting
 ------------

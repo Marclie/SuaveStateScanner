@@ -274,12 +274,6 @@ The mesh uses a fixed 0.05 Angstrom spacing. PySCF is optional; version 2.9 has 
 B3LYP uses PySCF's installed LibXC definition; the resolved functional components,
 LibXC/PySCF versions and numerical grid level (3) are recorded for reproducibility.
 
-**Why 6-31G rather than STO-3G?** H2/STO-3G has two AOs and only one
-occupied-to-virtual channel per spin, so standard spin-conserving TDDFT supports
-at most two excited roots. H2/6-31G has four AOs and three virtual orbitals per
-spin, giving six roots. It is the selected small-basis alternative for retaining
-one ground plus six excited states; extra roots are never invented or padded.
-
 Run from the repository root:
 
 ```bash
@@ -342,35 +336,6 @@ The workflow saves:
 * `orbitals.npz`: native MO coefficients, occupations, orbital energies, AO overlaps/labels
   and bond lengths; necessary to interpret full X/Y amplitudes when needed.
 * `scanner.log` and `temp_out.csv`: convergence log and interim energy output.
-
-The full X/Y amplitudes and MO labels are still computed internally for interpretation,
-but they are no longer exported as part of the CSV workflow used by the scanner.
-Both native input and sorted checkpoints can also be loaded into the GUI with
-`num_states=7`. The energy-only final output is not a restart/input-format CSV.
-
-### Physical limitations and test expectations
-
-Every geometry starts with a localized alpha-on-H1/beta-on-H2 density, allowing
-UKS to break spin symmetry beyond the Coulson–Fischer point rather than remaining
-on an unstable restricted-like branch. C2v symmetry does not forbid this spin
-symmetry breaking along the bond axis; this s-only basis has sigma-type orbitals.
-The TDDFT solver starts with a complete single-excitation guess space, including
-all spin-conserving symmetries. Internal UKS stability, SCF convergence,
-and six positive, converged TDDFT roots are checked. Missing/imaginary roots cause
-an explicit failure: the workflow never invents roots or silently substitutes TDA.
-
-The unrestricted response includes both singlet-like and triplet-like spin-conserving
-roots; it is **not a singlet-only spectrum**. Beyond spin symmetry breaking, the UKS
-reference is spin contaminated and roots are not pure spin eigenstates. Spin-flip
-and explicit double excitations are not included. Adiabatic B3LYP TDDFT is not an
-exact correlated dissociation benchmark, and 2.50 Angstrom is not infinite separation.
-6-31G has no polarization functions on hydrogen. The real Coulson–Fischer soft
-mode is nonmonotonic and should not be smoothed away.
-
-All six spin-conserving single-excitation roots are included, so no higher roots
-are omitted at an energy-window cutoff in this basis. Nevertheless,
-degenerate-root rotations can make individual labels nonunique, and continuity
-assignment alone is not proof of exact state identity at avoided crossings.
 
 [tests/end_to_end/test_pyscf_h2.py](tests/end_to_end/test_pyscf_h2.py) runs both
 native-root and deliberately shuffled workflows, sharing the costly electronic-structure
@@ -438,8 +403,6 @@ def getMetric(dE, dP):
 
     return (dE * dP).sum()
 ```
-
-- If you are still having trouble, please contact me at my [email](mailto:mliebenthal@fsu.edu) or submit a ticket and I will try to help you out.
 
 Make sure to plot the guess ordering at different iterations from the 'tempOutput.csv' file. This can help you recognize if a set of parameters will work or not before waiting for the reordering procedure to terminate. The reordering procedure will repeat the scan over all points for the number of points squared, or until no more state swaps improve the continuity at each point. For degenerate states with identical properties, this can sometimes cause issues where the two states swap with each other arbitrarily for each scan. In this case, it is ideal to terminate the calculation and use tempOutput.csv as the final result.
 
